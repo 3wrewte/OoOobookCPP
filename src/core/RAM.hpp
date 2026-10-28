@@ -1,4 +1,7 @@
-#include<bits/stdc++.h>
+#ifndef RAM_H
+#define RAM_H
+#include<array>
+#include<cstddef>
 #include<assert.h>
 #include "phase.hpp"
 
@@ -14,7 +17,7 @@ struct RAM {
         bank.fill(T()); 
     }
     void prepare(){
-        assert(global_phase == Phase::Prepare)
+        assert(global_phase == Phase::Prepare);
         pending_enable.fill(false); 
         pending_data.fill(T());
         pending_addr.fill(0);
@@ -23,14 +26,14 @@ struct RAM {
     }
 
     const T& read(size_t addr) const {
-        assert(addr < D) 
+        assert(addr < D) ;
         return bank[addr]; 
     }  // 旧值
 
     void write(size_t port, size_t addr, const T& din, bool enable) {
-        assert(global_phase == Phase::Comb) 
-        assert(addr < D)
-        assert(driven[port]  == false)
+        assert(global_phase == Phase::Comb) ;
+        assert(addr < D);
+        assert(driven[port]  == false);
         pending_addr[port]=addr; 
         pending_data[port]=din; 
         pending_enable[port]=enable;
@@ -38,17 +41,16 @@ struct RAM {
     }
     
     const T& read_through(size_t addr) const {
-        assert(addr < D) 
+        assert(addr < D) ;
         for(int i = 0; i < P; i++){
             if (pending_addr[i] == addr && pending_enable[i]) return pending_data[i]; 
         }
-        return bank[i];
+        return bank[addr];
     }
     void commit() { 
-        assert(global_phase == Phase::Commit)
+        assert(global_phase == Phase::Commit);
         for(int i = P - 1; i >= 0; i--){
-            assert(driven[i] == true)
-            if (pending_enable[i]) return bank[pending_addr[i]] = pending_data[i]; 
+            if (pending_enable[i]) bank[pending_addr[i]] = pending_data[i]; 
         }
     }
 };
@@ -58,3 +60,4 @@ struct RAM {
 template <typename T, size_t P, size_t D>
 struct SinglePortRAM {}; // to be complete if needed
 */
+#endif

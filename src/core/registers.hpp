@@ -1,4 +1,6 @@
-#include<bits/stdc++.h>
+#ifndef REGISTER_H
+#define REGISTER_H
+#include<array>
 #include<assert.h>
 #include "phase.hpp"
 
@@ -15,16 +17,16 @@ struct DoubleBufferRegister {
     }
     
     void prepare(){
-        assert(global_phase == Phase::Prepare)
-        bank[~phase] = T();
+        assert(global_phase == Phase::Prepare);
+        bank[!phase] = T();
         driven = 0;
     }
 
     void commit() { 
-        assert(global_phase == Phase::Commit)
+        assert(global_phase == Phase::Commit);
         phase = !phase; 
         if(!driven){
-            bank[phase] = bank[~phase]
+            bank[phase] = bank[!phase];
             // warning: not driven
         }
     }
@@ -34,19 +36,24 @@ struct DoubleBufferRegister {
     }      // 只读 current
 
     void set(const T& x) { 
-        assert(global_phase == Phase::Comb)
-        assert(driven == 0)
+        assert(global_phase == Phase::Comb);
+        assert(driven == 0);
         driven = 1;
         bank[!phase] = x; 
     }        // 写 next
 
     T& nxt() {
-        assert(driven == 1)
-        return bank[~phase]; 
+        assert(driven == 1);
+        return bank[!phase]; 
     }
 
     
 };
 
+
+/*
 template <typename T>
-using Register = DoubleBufferRegister;
+struct PendingChangeRegister {};
+*/
+
+#endif
