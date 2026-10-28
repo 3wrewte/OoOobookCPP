@@ -15,6 +15,10 @@ struct RAM {
     std::array<bool, P> driven; // wire
     void reset() { 
         bank.fill(T()); 
+        pending_enable.fill(false);
+        pending_data.fill(T());
+        pending_addr.fill(0);
+        driven.fill(false);
     }
     void prepare(){
         assert(global_phase == Phase::Prepare);
@@ -40,16 +44,18 @@ struct RAM {
         driven[port] = true;
     }
     
+    // Transparent read: sees a write staged on the same tick (lowest port wins
+    // on a same-address conflict; callers should merge same-line writes first).
     const T& read_through(size_t addr) const {
         assert(addr < D) ;
-        for(int i = 0; i < P; i++){
+        for (size_t i = 0; i < P; i++){
             if (pending_addr[i] == addr && pending_enable[i]) return pending_data[i]; 
         }
         return bank[addr];
     }
     void commit() { 
         assert(global_phase == Phase::Commit);
-        for(int i = P - 1; i >= 0; i--){
+        for (size_t i = 0; i < P; i++){
             if (pending_enable[i]) bank[pending_addr[i]] = pending_data[i]; 
         }
     }

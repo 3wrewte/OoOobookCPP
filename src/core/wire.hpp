@@ -29,7 +29,7 @@ struct wire{
         driven = 1;
         val = x;
     }
-    const T& get(){
+    const T& get() const {
         assert(driven == 1);
         return val;
     }

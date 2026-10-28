@@ -29,28 +29,5 @@ const size_t Side_bits = 1;
 enum Side_t : bool {Buy = 0, Sell = 1};
 
 
-template <size_t Bits>
-inline uint64_t saturating_add64(uint64_t a, uint64_t b){
-    assert(Bits <= 64);
-    uint64_t val = std::saturating_add(a, b);
-    uint64_t mask = ~((~uint64_t(0)) << Bits);
-    return val & mask;
-}
-
-template <size_t Bits>
-inline uint32_t saturating_add32(uint32_t a, uint32_t b){
-    assert(Bits <= 32);
-    uint32_t val = std::saturating_add(a, b);
-    uint32_t mask = ~((~uint32_t(0)) << Bits);
-    return val & mask;
-}
-
-template <size_t Bits>
-inline uint8_t saturating_add8(uint8_t a, uint8_t b){
-    assert(Bits <= 8);
-    uint8_t val = std::saturating_add(a, b);
-    uint8_t mask = ~((~uint8_t(0)) << Bits);
-    return val & mask;
-}
 
 #endif
