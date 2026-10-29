@@ -63,19 +63,19 @@ inline bool CanonicalAddrStructuredValid(const CanonicalAddrStructured& a) {
 
 inline CanonicalAddr_t CanonicalAddrPack(const CanonicalAddrStructured& a){
     assert(CanonicalAddrStructuredValid(a));
-    return (a.sym << 57) 
-    | ((a.pos & 0x0ffffff0) << 33) 
-    | ((a.price & 0x0ffffff0) << 9) 
+    return (CanonicalAddr_t(a.sym) << 57) 
+    | ((CanonicalAddr_t(a.pos) & 0x0ffffff0) << 29) 
+    | ((CanonicalAddr_t(a.price) & 0x0ffffff0) << 5) 
     | ((a.side & 0b1) << 8) 
     | ((a.price & 0x0f) << 4) 
     | ((a.pos & 0x0f));
 }
 inline CanonicalAddrStructured  CanonicalAddrUnpack(const CanonicalAddr_t &addr){
     return CanonicalAddrStructured{
-        .sym   = Sym_t   ((addr & 0xe000'0000'0000'0000) >> 57),
+        .sym   = Sym_t   ((addr & 0xfe00'0000'0000'0000) >> 57),
         .side  = Side_t  ((addr & 0x0000'0000'0000'0100) >> 8 ),
         .price = Price_t(((addr & 0x0000'0001'ffff'fe00) >> 5 )  |  ((addr & 0xf0) >> 4)),
-        .pos   = Pos_t  (((addr & 0x1fff'fffe'0000'0000) >> 29)  |  ((addr & 0x0f)     ))
+        .pos   = Pos_t  (((addr & 0x01ff'fffe'0000'0000) >> 29)  |  ((addr & 0x0f)     ))
     };
 }
 
@@ -116,9 +116,9 @@ LineSum_key_t get_LineSum_key(const LineSumCacheView& a){
 inline LineSumCacheView LineSumCacheIndexing (const CanonicalAddrStructured &a){
     assert(CanonicalAddrStructuredValid(a));
     return LineSumCacheView{
-        .tag    = LineSum_tag_t   ((a.sym << 44) | (a.price & 0x0fff'fff0 << 16) | (a.pos & 0x0fff'ff00 >> 8)),
+        .tag    = LineSum_tag_t   ((uint64_t(a.sym) << 44) | ((uint64_t(a.price) & 0x0fff'fff0) << 16) | ((a.pos & 0x0fff'ff00) >> 8)),
         .index  = LineSum_index_t ((a.side << 4) | (a.price & 0x0000'000f)),
-        .offset = LineSum_offset_t( a.pos & 0x0000'00f0 >> 4)
+        .offset = LineSum_offset_t((a.pos & 0x0000'00f0) >> 4)
     };
 }
 
@@ -134,8 +134,8 @@ LevelSum_key_t get_LevelSum_key(const LevelSumCacheView& a){
 inline LevelSumCacheView LevelSumCacheIndexing (const CanonicalAddrStructured &a){
     assert(CanonicalAddrStructuredValid(a));
     return LevelSumCacheView{
-        .tag    = LevelSum_tag_t   ((a.sym << 20) | (a.price & 0x0fff'ff00 >> 8)),
-        .index  = LevelSum_index_t ((a.side << 4) | (a.price & 0x0000'00f0 >> 4)),
+        .tag    = LevelSum_tag_t   ((a.sym << 20) | ((a.price & 0x0fff'ff00) >> 8)),
+        .index  = LevelSum_index_t ((a.side << 4) | ((a.price & 0x0000'00f0) >> 4)),
         .offset = LevelSum_offset_t( a.price & 0x0000'000f)
     };
 }
