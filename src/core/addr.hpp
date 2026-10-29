@@ -84,7 +84,7 @@ struct IDVolCacheView {
     IDVol_index_t  index ;   // 5 bits
     IDVol_offset_t offset;   // 4 bits
 };
-IDVol_key_t get_IDVol_key(const IDVolCacheView& a){
+inline IDVol_key_t get_IDVol_key(const IDVolCacheView& a){
     return (a.tag << 5) | a.index;
 }
 
@@ -95,7 +95,7 @@ inline IDVolCacheView IDVolCacheIndexing (const CanonicalAddr_t &addr){
         .offset = IDVol_offset_t((addr & 0x0000'0000'0000'000f)     )
     };
 }
-CanonicalAddr_t  IDVolCacheIndexMerge(const IDVolCacheView& a){
+inline CanonicalAddr_t  IDVolCacheIndexMerge(const IDVolCacheView& a){
     assert(a.   tag <= 1ull <<    IDVol_tag_bits);
     assert(a. index <= 1u  <<  IDVol_index_bits);
     assert(a.offset <= 1u  << IDVol_offset_bits);
@@ -109,8 +109,16 @@ struct LineSumCacheView {
     LineSum_offset_t offset;   // 4 bits
 };
 
-LineSum_key_t get_LineSum_key(const LineSumCacheView& a){
+inline LineSum_key_t get_LineSum_key(const LineSumCacheView& a){
     return (a.tag << 5) | a.index;
+}
+
+inline LineSum_index_t LineSum_key2index(const LineSum_key_t &a){
+    return a & 0x1f;
+}
+
+inline LineSum_tag_t LineSum_key2tag(const LineSum_key_t &a){
+    return a >> 5;
 }
 
 inline LineSumCacheView LineSumCacheIndexing (const CanonicalAddrStructured &a){
@@ -127,8 +135,16 @@ struct LevelSumCacheView {
     LevelSum_index_t  index;    // 5 bits
     LevelSum_offset_t offset;   // 4 bits
 };
-LevelSum_key_t get_LevelSum_key(const LevelSumCacheView& a){
+inline LevelSum_key_t get_LevelSum_key(const LevelSumCacheView& a){
     return (a.tag << 5) | a.index;
+}
+
+inline LevelSum_index_t LevelSum_key2index(const LevelSum_key_t &a){
+    return a & 0x1f;
+}
+
+inline LevelSum_tag_t LevelSum_key2tag(const LevelSum_key_t &a){
+    return a >> 5;
 }
 
 inline LevelSumCacheView LevelSumCacheIndexing (const CanonicalAddrStructured &a){

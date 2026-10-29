@@ -3,3 +3,5 @@ old/
 old
 libs/
 tmp/
+*.kdev4
+.kdev4/

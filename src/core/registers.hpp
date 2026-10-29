@@ -49,7 +49,7 @@ struct DoubleBufferRegister {
         bank[!phase] = x; 
     }        // 写 next
 
-    // Read-modify-write: returns a sratic reference to next (already a copy of
+    // Read the modified written value: returns a sratic reference to next (already a copy of
     // current from prepare). read-only and only available after driven
     const T& nxt() {
         assert(driven == 1);
