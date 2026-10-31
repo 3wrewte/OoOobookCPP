@@ -29,13 +29,13 @@ struct RAM {
 
     }
 
-    const T& read(size_t& addr) const {
+    const T& read(size_t addr) const {
         assert(addr < D) ;
         return bank[addr]; 
     }  // 旧值
 
     template<size_t port>
-    void write(size_t& addr, const T& din, bool enable) {
+    void write(size_t addr, const T& din, bool enable) {
         static_assert(port < P);
         assert(global_phase == Phase::Comb) ;
         assert(addr < D);
@@ -48,7 +48,7 @@ struct RAM {
     
     // Transparent read: sees a write staged on the same tick (lowest port wins
     // on a same-address conflict; callers should merge same-line writes first).
-    const T& read_through(size_t& addr) const {
+    const T& read_through(size_t addr) const {
         assert(addr < D) ;
         for (size_t i = 0; i < P; i++){
             if (pending_addr[i] == addr && pending_enable[i]) return pending_data[i]; 

@@ -1,4 +1,4 @@
-#include "doctest.h"
+#include <doctest/doctest.h>
 #include "src/core/addr.hpp"
 
 // Port of `crates/exchange-matcher-core/src/addr.rs` unit tests, against the

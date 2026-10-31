@@ -1,4 +1,4 @@
-#include "doctest.h"
+#include <doctest/doctest.h>
 #include "src/core/wire.hpp"
 #include "src/core/registers.hpp"
 #include "src/core/RAM.hpp"
@@ -23,7 +23,7 @@ struct PipelineSlice {
     }
     // comb: write RAM + advance the index register.
     void comb2(uint32_t din) {
-        ram.write(0, nxt.get(), din, true);
+        ram.write<0>(nxt.get(), din, true);
         index.set(nxt.get());
     }
 };
@@ -85,7 +85,7 @@ TEST_CASE("ram write commits and reads back") {
     RAM<uint32_t, 1, 16> ram;
     ram.reset();
     global_phase = Phase::Prepare; ram.prepare();
-    global_phase = Phase::Comb;   ram.write(0, 3, 99, true);
+    global_phase = Phase::Comb;   ram.write<0>(3, 99, true);
     global_phase = Phase::Commit; ram.commit();
     CHECK(ram.read(3) == 99);
 }
@@ -94,7 +94,7 @@ TEST_CASE("ram read_through sees a staged write") {
     RAM<uint32_t, 1, 16> ram;
     ram.reset();
     global_phase = Phase::Prepare; ram.prepare();
-    global_phase = Phase::Comb;   ram.write(0, 5, 77, true);
+    global_phase = Phase::Comb;   ram.write<0>(5, 77, true);
     CHECK(ram.read(5) == 0);           // synchronous read: old value
     CHECK(ram.read_through(5) == 77);  // transparent read: staged write
     global_phase = Phase::Commit; ram.commit();

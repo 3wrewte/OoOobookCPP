@@ -155,4 +155,20 @@ inline LevelSumCacheView LevelSumCacheIndexing (const CanonicalAddrStructured &a
         .offset = LevelSum_offset_t( a.price & 0x0000'000f)
     };
 }
+
+inline uint64_t upper_one_mask(uint64_t s){ // including bit s itself  {1, ..., 1, 1(bit s), 0, ...(s zeros in total), 0}
+    return  (~0ull) << (s - 1);
+}
+
+inline uint64_t lower_one_mask(uint64_t s){ // including bit s itself  {0, ..., 0, 1(bit s), 1, ...(s + 1 ones in total), 1}
+    return  (1 << (s + 1)) - 1;
+}
+
+inline uint64_t LSB(uint64_t word){
+    return std::countr_zero(word);
+}
+
+inline uint64_t MSB(uint64_t word){
+    return 63 - std::countl_zero(word);
+}
 #endif
