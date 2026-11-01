@@ -10,7 +10,7 @@ const size_t   Sym_bits = 7;
 using Price_t   = uint32_t;   // 28 valid bit
 using Pos_t     = uint32_t;   // 28 valid bit
 using Sym_t     = uint8_t ;   // 7  valid bit 
-const Price_t Price_max = ~(0x0u);
+const Price_t Price_max = (1u << Price_bits) - 1;
 const Price_t Price_min = 0;
 
 const size_t     Qty_bits = 32; //28 bit if we want QtySum to be 32bit
