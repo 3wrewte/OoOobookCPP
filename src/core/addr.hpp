@@ -84,6 +84,11 @@ struct IDVolCacheView {
     IDVol_index_t  index ;   // 5 bits
     IDVol_offset_t offset;   // 4 bits
 };
+inline bool IDVolCacheViewValid(const IDVolCacheView& a) {
+    return a.tag      < (1ull << IDVol_tag_bits   )
+        && a.index    < (1    << IDVol_index_bits )
+        && a.offset   < (1    << IDVol_offset_bits);
+}
 inline IDVol_key_t get_IDVol_key(const IDVolCacheView& a){
     return (a.tag << 5) | a.index;
 }
@@ -108,6 +113,12 @@ struct LineSumCacheView {
     LineSum_index_t  index;    // 5 bits
     LineSum_offset_t offset;   // 4 bits
 };
+
+inline bool LineSumCacheViewValid(const LineSumCacheView& a) {
+    return a.tag      < (1ull << LineSum_tag_bits   )
+        && a.index    < (1    << LineSum_index_bits )
+        && a.offset   < (1    << LineSum_offset_bits);
+}
 
 inline LineSum_key_t get_LineSum_key(const LineSumCacheView& a){
     return (a.tag << 5) | a.index;
@@ -135,6 +146,13 @@ struct LevelSumCacheView {
     LevelSum_index_t  index;    // 5 bits
     LevelSum_offset_t offset;   // 4 bits
 };
+
+inline bool LevelSumCacheViewValid(const LevelSumCacheView& a) {
+    return a.tag      < (1u   << LevelSum_tag_bits   )
+        && a.index    < (1    << LevelSum_index_bits )
+        && a.offset   < (1    << LevelSum_offset_bits);
+}
+
 inline LevelSum_key_t get_LevelSum_key(const LevelSumCacheView& a){
     return (a.tag << 5) | a.index;
 }

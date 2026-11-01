@@ -1,39 +1,95 @@
+#pragma once
 #include <array>
 #include <unordered_map>
 #include <numeric>
+#include <cassert>
 #include "phase.hpp"
 #include "types.hpp"
 #include "addr.hpp"
 
-struct SumMap { // a temporary substitution of LineSumCache and LevelSumCache, write immediate, actually not RTL structure!!!
+struct LineSumMap { // a temporary substitution of LineSumCache, write immediate, actually not RTL structure!!!
   std::unordered_map<uint64_t, std::array<QtySum_t,16>> ram;  // key = line_key
-  void apply_delta(uint64_t key, uint32_t offset, QtyDelta_t delta); // write-through
-  std::array<QtySum_t,16> read_row_through(uint64_t key);                     // read through !!!
-  QtySum_t read_single_through(uint64_t key, uint32_t offset);                // read through !!!
-};
 
-void SumMap::apply_delta(uint64_t key, uint32_t offset, QtyDelta_t delta){
-    if(ram.find(key) == ram.end()){ //empty line
-        assert(delta >= 0);
-        ram[key] = std::array<QtySum_t,16>();
-        ram[key][offset] = delta;
-        return;
-    }
-    ram[key][offset] = std::saturating_add(int64_t(ram[key][offset]), delta);
+  void apply_delta(LineSumCacheView addr, QtyDelta_t delta) // write-through
+  {
+    assert(LineSumCacheViewValid(addr));
+    const uint64_t key = get_LineSum_key(addr);
+    const uint64_t offset = addr.offset;
+    //if(ram.find(key) == ram.end() && delta == 0)return;
+    const QtySum_t current = ram[key][offset];
+    assert(current < (1ULL << QtySum_bits));
+    const QtySum_t nxt = current + QtySum_t(delta); // must not exceed QtySum_bits + 1 since delta {delta sign bit, delta unsigned bits = QtySum_bits}
+    assert(nxt < (1ULL << QtySum_bits)); // if delta > 0 and too positive, exceeds QtySum_bits, then assert fail; if delta < 0 and delta < -current, then nxt become negative meaning, QtySum_bits + 1 bit become 1, then assert failed too
+    ram[key][offset] = nxt;
     for(size_t j = 0; j < 16; j++)if (ram[key][j] != 0) return; //if all clear, then delete from map
     ram.erase(ram.find(key));
-}
+  }
 
-std::array<QtySum_t,16> SumMap::read_row_through(uint64_t key){
-  if(ram.find(key) == ram.end())return std::array<QtySum_t, 16>();
-  else return ram[key];
-}
+  std::array<QtySum_t,16> read_row_through(LineSumCacheView addr)                     // read through !!!
+  {
+    assert(LineSumCacheViewValid(addr));
+    const uint64_t key = get_LineSum_key(addr);
+    if(ram.find(key) == ram.end())return std::array<QtySum_t, 16>();
+    else return ram[key];
+  }
 
-QtySum_t SumMap::read_single_through(uint64_t key, uint32_t offset){
-  if(ram.find(key) == ram.end())return 0;
-  else return ram[key][offset];
-}
+  QtySum_t read_single_through(LineSumCacheView addr)                // read through !!!
+  {
+    assert(LineSumCacheViewValid(addr));
+    const uint64_t key = get_LineSum_key(addr);
+    const uint64_t offset = addr.offset;
+    if(ram.find(key) == ram.end())return 0;
+    else return ram[key][offset];
+  }
+
+  void clear() // does not map to reset() in RTL, debug only
+  {
+      ram.clear();
+  }
+};
+
+struct LevelSumMap { // a temporary substitution of LevelSumCache, write immediate, actually not RTL structure!!!
+  std::unordered_map<uint64_t, std::array<QtySum_t,16>> ram;  // key = line_key
+
+  void apply_delta(LevelSumCacheView addr, QtyDelta_t delta) // write-through
+  {
+    assert(LevelSumCacheViewValid(addr));
+    const uint64_t key = get_LevelSum_key(addr);
+    const uint64_t offset = addr.offset;
+    //if(ram.find(key) == ram.end() && delta == 0)return;
+    const QtySum_t current = ram[key][offset];
+    assert(current < (1ULL << QtySum_bits));
+    const QtySum_t nxt = current + QtySum_t(delta); // must not exceed QtySum_bits + 1 since delta {delta sign bit, delta unsigned bits = QtySum_bits}
+    assert(nxt < (1ULL << QtySum_bits)); // if delta > 0 and too positive, exceeds QtySum_bits, then assert fail; if delta < 0 and delta < -current, then nxt become negative meaning, QtySum_bits + 1 bit become 1, then assert failed too
+    ram[key][offset] = nxt;
+    for(size_t j = 0; j < 16; j++)if (ram[key][j] != 0) return; //if all clear, then delete from map
+    ram.erase(ram.find(key));
+  }
+
+  std::array<QtySum_t,16> read_row_through(LevelSumCacheView addr)                     // read through !!!
+  {
+    assert(LevelSumCacheViewValid(addr));
+    const uint64_t key = get_LevelSum_key(addr);
+    if(ram.find(key) == ram.end())return std::array<QtySum_t, 16>();
+    else return ram[key];
+  }
+
+  QtySum_t read_single_through(LevelSumCacheView addr)                // read through !!!
+  {
+    assert(LevelSumCacheViewValid(addr));
+    const uint64_t key = get_LevelSum_key(addr);
+    const uint64_t offset = addr.offset;
+    if(ram.find(key) == ram.end())return 0;
+    else return ram[key][offset];
+  }
+
+  void clear() // does not map to reset() in RTL, debug only
+  {
+    ram.clear();
+  }
+};
 /*
+ constexpr 不能修饰函数参数、for (size_t i = R - 1; i >= 0; i--) 是无符号死循环、read() 还是 ... 占位、ram[k] 会插入空行、signed/unsigned 混加。
 template <size_t W, size_t R>
 struct LineSumCache
 {

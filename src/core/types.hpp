@@ -1,6 +1,7 @@
 #ifndef TYPES_H
 #define TYPES_H
 #include<cstdint>
+#include<cstddef>
 #include<numeric>
 
 const size_t Price_bits = 28;
@@ -22,7 +23,7 @@ using MopSeq  = uint32_t;
 using UopSeq  = uint64_t;
 using Seq     = uint64_t;
 
-const size_t   QtySum_bits = 64;
+const size_t   QtySum_bits = 63;
 const size_t QtyDelta_bits = 64;
 using QtySum_t     = uint64_t;   // line_sum/level_sum/tail
 using QtyDelta_t   = int64_t;    // planned_delta 等有符号
