@@ -2,6 +2,7 @@
 #define ADDR_H
 #include <cstdint>
 #include <cstddef>
+#include <bit>
 #include <tuple>
 #include <cassert>
 #include <optional>
@@ -176,11 +177,13 @@ inline LevelSumCacheView LevelSumCacheIndexing (const CanonicalAddrStructured &a
 }
 
 inline uint64_t upper_one_mask(uint64_t s){ // including bit s itself  {1, ..., 1, 1(bit s), 0, ...(s zeros in total), 0}
+    if (s == 64) return 0ull;
     return  (~0ull) << s;
 }
 
 inline uint64_t lower_one_mask(uint64_t s){ // including bit s itself  {0, ..., 0, 1(bit s), 1, ...(s + 1 ones in total), 1}
-    return  (1ull << (s + 1)) - 1;
+    if (s >= 63) return ~(0ull);
+    else return  (1ull << (s + 1)) - 1;
 }
 
 inline std::optional<uint64_t> LSB(uint64_t word){ // MUST check whether word = 0, if true, return nullopt

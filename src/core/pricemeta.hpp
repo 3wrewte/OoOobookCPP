@@ -4,7 +4,8 @@
 #include<optional>
 #include<unordered_map>
 #include<array>
-#include<assert.h>
+#include<cassert>
+#include<algorithm>
 #include"types.hpp"
 #include"phase.hpp"
 #include "addr.hpp"
@@ -41,7 +42,7 @@ struct SideMeta{
         const Price_t block_offset= (price >> 4 ) & 0x3f; // price[9:4]
         const Price_t super_offset= (price >> 10) & 0x3f; // price[15:10]
         if (active){ //activate
-            if(row_masks[row_index] & 1ull << row_offset) active_levels ++;// some level flips from non-active to active
+            if(!(row_masks[row_index] & (1ull << row_offset))) active_levels ++;// some level flips from non-active to active
             row_masks[row_index]     |= 1ull << row_offset  ;
 
             block_masks[block_index] |= 1ull << block_offset;
@@ -52,7 +53,7 @@ struct SideMeta{
             bool   row_empty = true;
             bool block_empty = true;
             if(row_masks.find(row_index) != row_masks.end()){ //if not find, then do nothing
-                if (row_masks[row_index] & ~(1ull << row_offset)) active_levels--; // some level flips from active to non-active
+                if (row_masks[row_index] & (1ull << row_offset)) active_levels--; // some level flips from active to non-active
                 row_masks[row_index] &= ~(1ull << row_offset);
                 if (row_masks[row_index] == 0)row_masks.erase(row_index);
                 else row_empty = false;
@@ -84,10 +85,10 @@ struct SideMeta{
         // search for best
 
         if(side == Side_t::Buy){
-            best = search_lower_active(price, 0);
+            best = search_lower_active(price, Price_min);
         }
         else if(side == Side_t::Sell){
-            best = search_upper_active(price, ~(0x0u));// notice, if Price_bit > 32, should be ~(0x0ull)
+            best = search_upper_active(price, Price_max);// notice, if Price_bit > 32, should be ~(0x0ull)
         }
     }
 
@@ -131,35 +132,18 @@ struct SideMeta{
         Price_t res_block_offset; // price[9:4]
         Price_t res_super_offset; // price[15:10]
 
-        const uint64_t first_mask = super_masks[start_super_key] &
-            ((start_super_key != end_super_key)? upper_one_mask(start_super_offset)   // if start and end not in same super block
-                : upper_one_mask(start_super_offset) & lower_one_mask(end_super_offset)); // if start and end     in same super block
-        const uint64_t last_mask = super_masks[end_super_key] & lower_one_mask(end_super_offset);
-
-        if(first_mask){ // 1 from offset to all upper offset
-            res_super_key    = start_super_key;
-            res_super_offset = LSB(first_mask).value_or(0); // result super offset, Least Significant Bit of the super mask
-            lower_block_offset = start_block_offset;
-            upper_block_offset = (start_super_key != end_super_key)? 0x3fu //if start and end not in same super block, serch untill the end of block
-                : end_block_offset; // if start and end is in same super block, search until end block offset
-            goto super_done;
-        }
-        for(Price_t i = start_super_key + 1; i < end_super_key; i++ ){
-            if(super_masks[i]){
+        for(int64_t i = start_super_key; i <= end_super_key; i++ ){ // i is signed
+            uint64_t current_mask = super_masks[i];
+            if(i == start_super_key) current_mask &= upper_one_mask(start_super_offset);
+            if(i ==   end_super_key)current_mask &= lower_one_mask(  end_super_offset);
+            if(current_mask){
                 res_super_key    = i;
-                res_super_offset = LSB(super_masks[i]).value_or(0);
-                lower_block_offset = 0x00u;
-                upper_block_offset = 0x3fu;
+                res_super_offset = LSB(current_mask).value_or(0);
+                lower_block_offset = (start_super_key == res_super_key && start_super_offset == res_super_offset)? start_block_offset : 0x00u;
+                upper_block_offset = (  end_super_key == res_super_key && end_super_offset == res_super_offset)?                end_block_offset // if start and end is in same super block, search until end block offset
+                    : 0x3fu; //if start and end not in same super block, serch untill the end of block
                 goto super_done;
             }
-        }
-        if(last_mask) { // 1 from offset 0 to end offset
-            //block key = {super key(12bit), offset(6bit)}
-            res_super_key    = end_super_key;
-            res_super_offset = LSB(last_mask).value_or(0);
-            lower_block_offset = 0x00u;
-            upper_block_offset = end_block_offset;
-            goto super_done;
         }
         return std::nullopt;
     super_done:
@@ -167,18 +151,20 @@ struct SideMeta{
         const uint64_t current_block = block_masks[res_block_key] //we already confirm that this block non-empty, and hence will not insert zero line
             & upper_one_mask(lower_block_offset)
             & lower_one_mask(upper_block_offset);
+        if(!current_block)return std::nullopt;
         res_block_offset = LSB(current_block).value_or(0);
         res_row_key = (res_block_key << 6)
             | res_block_offset;
-        lower_row_offset = (res_block_key == start_block_key)? start_row_offset
+        lower_row_offset = (res_block_key == start_block_key && res_block_offset == start_block_offset)? start_row_offset
             : 0x00u;
-        upper_row_offset = (res_block_key == end_block_key)? end_row_offset
+        upper_row_offset = (res_block_key == end_block_key && res_block_offset == end_block_offset)? end_row_offset
             : 0x3fu;
 
 
         const uint64_t current_row = row_masks[res_row_key]
             & upper_one_mask(lower_row_offset)
             & lower_one_mask(upper_row_offset);
+        if(!current_row)return std::nullopt;
         res_row_offset = LSB(current_row).value_or(0);
 
         return (res_row_key) << 4 | res_row_offset;
@@ -214,35 +200,18 @@ struct SideMeta{
         Price_t res_block_offset; // price[9:4]
         Price_t res_super_offset; // price[15:10]
 
-        const uint64_t first_mask = super_masks[start_super_key] &
-        ((start_super_key != end_super_key)? lower_one_mask(start_super_offset)   // if start and end not in same super block
-        : lower_one_mask(start_super_offset) & upper_one_mask(end_super_offset)); // if start and end     in same super block
-        const uint64_t last_mask = super_masks[end_super_key] & upper_one_mask(end_super_offset);
-
-        if(first_mask){ // 1 from offset to all upper offset
-            res_super_key    = start_super_key;
-            res_super_offset = MSB(first_mask).value_or(0); // result super offset, Least Significant Bit of the super mask
-            upper_block_offset = start_block_offset;
-            lower_block_offset = (start_super_key != end_super_key)? 0x00u //if start and end not in same super block, serch untill the end of block
-            : end_block_offset; // if start and end is in same super block, search until end block offset
-            goto super_done;
-        }
-        for(Price_t i = start_super_key - 1; i > end_super_key; i-- ){
-            if(super_masks[i]){
+        for(int64_t i = start_super_key; i >= end_super_key; i-- ){ // i must be signed, otherwise will overflow at 0
+            uint64_t current_mask = super_masks[i];
+            if(i == start_super_key) current_mask &= lower_one_mask(start_super_offset);
+            if(i ==   end_super_key)current_mask &= upper_one_mask(  end_super_offset);
+            if(current_mask){
                 res_super_key    = i;
-                res_super_offset = MSB(super_masks[i]).value_or(0);
-                upper_block_offset = 0x3fu;
-                lower_block_offset = 0x00u;
+                res_super_offset = MSB(current_mask).value_or(0);
+                lower_block_offset = (  end_super_key == res_super_key &&   end_super_offset == res_super_offset)? end_block_offset : 0x00u;
+                upper_block_offset = (start_super_key == res_super_key && start_super_offset == res_super_offset)?                start_block_offset // if start and end is in same super block, search until end block offset
+                : 0x3fu; //if start and end not in same super block, serch untill the end of block
                 goto super_done;
             }
-        }
-        if(last_mask) { // 1 from offset 0 to end offset
-            //block key = {super key(12bit), offset(6bit)}
-            res_super_key    = end_super_key;
-            res_super_offset = MSB(last_mask).value_or(0);
-            upper_block_offset = 0x3fu;
-            lower_block_offset = end_block_offset;
-            goto super_done;
         }
         return std::nullopt;
         super_done:
@@ -250,18 +219,20 @@ struct SideMeta{
         const uint64_t current_block = block_masks[res_block_key]
         & upper_one_mask(lower_block_offset)
         & lower_one_mask(upper_block_offset);
+        if(!current_block)return std::nullopt;
         res_block_offset = MSB(current_block).value_or(0);
         res_row_key = (res_block_key << 6)
         | res_block_offset;
-        upper_row_offset = (res_block_key == start_block_key)? start_row_offset
+        upper_row_offset = (res_block_key == start_block_key && res_block_offset == start_block_offset)? start_row_offset
         : 0x3fu;
-        lower_row_offset = (res_block_key == end_block_key)? end_row_offset
+        lower_row_offset = (res_block_key == end_block_key && res_block_offset == end_block_offset)? end_row_offset
         : 0x00u;
 
 
         const uint64_t current_row = row_masks[res_row_key]
         & upper_one_mask(lower_row_offset)
         & lower_one_mask(upper_row_offset);
+        if(!current_row)return std::nullopt;
         res_row_offset = MSB(current_row).value_or(0);
 
         return (res_row_key) << 4 | res_row_offset;
@@ -286,10 +257,10 @@ struct BookMeta { // temporary, not RTL
         if(p + 1 > limit) return std::nullopt;
         return sides[Side_t::Sell].search_upper_active(p + 1, limit);
     }
-    std::optional<Price_t> next_bid_below(Price_t p, Price_t limit)// 从 p 向下走
+    std::optional<Price_t> next_bid_below(Price_t p, Price_t limit)// 从 p - 1 向下走
     {
-        if(p - 1 < limit) return std::nullopt;
-        return sides[Side_t::Buy ].search_lower_active(p + 1, limit);
+        if(p <= limit) return std::nullopt;
+        return sides[Side_t::Buy ].search_lower_active(p - 1, limit);
     }
 
     uint64_t get_version(){return version;}
@@ -299,14 +270,17 @@ struct BookMeta { // temporary, not RTL
         return sides[side].PriceMetaRAM[price];
     }
 
-    Pos_t get_meta_head_line(Side_t side, Price_t price){
-        if(sides[side].PriceMetaRAM.find(price) == sides[side].PriceMetaRAM.end())return 0;
-        return sides[side].PriceMetaRAM[price].head_line;
+    std::optional<Pos_t> get_meta_head_line(Side_t side, Price_t price){
+        if(sides[side].PriceMetaRAM.find(price) == sides[side].PriceMetaRAM.end())return std::nullopt;
+        if(sides[side].PriceMetaRAM[price].head_valid)return sides[side].PriceMetaRAM[price].head_line;
+        else return std::nullopt;
+
     }
 
     void  set_meta_head_line(Side_t side, Price_t price, Pos_t head_line){
         PriceMeta p = sides[side].PriceMetaRAM[price];
         p.head_line = head_line;
+        p.head_valid = true;
         sides[side].PriceMetaRAM[price] = p;
         return;
     }
