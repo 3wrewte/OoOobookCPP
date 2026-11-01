@@ -105,137 +105,99 @@ struct SideMeta{
         assert(start <= end);
         assert(start <= Price_max);
         assert(  end <= Price_max);
-        //Price_t start_row_key   = start >> 4 ;
+        const Price_t start_row_key   = start >> 4 ;
         const Price_t start_block_key = start >> 10;
         const Price_t start_super_key = start >> 16;
         const Price_t start_row_offset  = start & 0x0f; // price[3:0]
         const Price_t start_block_offset= (start >> 4 ) & 0x3f; // price[9:4]
         const Price_t start_super_offset= (start >> 10) & 0x3f; // price[15:10]
 
-        //Price_t end_row_key   =    end >> 4 ;
+        const Price_t end_row_key   =    end >> 4 ;
         const Price_t end_block_key =    end >> 10;
         const Price_t end_super_key =    end >> 16;
         const Price_t end_row_offset  =  end & 0x0f; // price[3:0]
         const Price_t end_block_offset= (end >> 4 ) & 0x3f; // price[9:4]
         const Price_t end_super_offset= (end >> 10) & 0x3f; // price[15:10]
 
-        Price_t   lower_row_offset; //= start & 0x0f; // price[3:0]
-        Price_t lower_block_offset; //= (start >> 4 ) & 0x3f; // price[9:4]
+        for(int64_t s = start_super_key; s <= end_super_key; s++ ){
+            uint64_t super_mask = super_masks[s];
+            if(s == start_super_key) super_mask &= upper_one_mask(start_super_offset);
+            if(s ==   end_super_key) super_mask &= lower_one_mask(  end_super_offset);
 
-        Price_t   upper_row_offset; //= end & 0x0f; // price[3:0]
-        Price_t upper_block_offset; //= (end >> 4 ) & 0x3f; // price[9:4]
+            while(super_mask){
+                const Price_t block_offset = LSB(super_mask).value();
+                super_mask &= super_mask - 1; // clear the selected block bit
+                const Price_t block_key = (s << 6) | block_offset;
 
-        Price_t   res_row_key ;
-        Price_t res_block_key ;
-        Price_t res_super_key ;
-        Price_t   res_row_offset; // price[3:0]
-        Price_t res_block_offset; // price[9:4]
-        Price_t res_super_offset; // price[15:10]
+                uint64_t block_mask = 0;
+                if(auto it = block_masks.find(block_key); it != block_masks.end()) block_mask = it->second;
+                if(block_key == start_block_key) block_mask &= upper_one_mask(start_block_offset);
+                if(block_key ==   end_block_key) block_mask &= lower_one_mask(  end_block_offset);
 
-        for(int64_t i = start_super_key; i <= end_super_key; i++ ){ // i is signed
-            uint64_t current_mask = super_masks[i];
-            if(i == start_super_key) current_mask &= upper_one_mask(start_super_offset);
-            if(i ==   end_super_key)current_mask &= lower_one_mask(  end_super_offset);
-            if(current_mask){
-                res_super_key    = i;
-                res_super_offset = LSB(current_mask).value_or(0);
-                lower_block_offset = (start_super_key == res_super_key && start_super_offset == res_super_offset)? start_block_offset : 0x00u;
-                upper_block_offset = (  end_super_key == res_super_key && end_super_offset == res_super_offset)?                end_block_offset // if start and end is in same super block, search until end block offset
-                    : 0x3fu; //if start and end not in same super block, serch untill the end of block
-                goto super_done;
+                while(block_mask){
+                    const Price_t row_offset = LSB(block_mask).value();
+                    block_mask &= block_mask - 1; // clear the selected row bit
+                    const Price_t row_key = (block_key << 6) | row_offset;
+
+                    uint64_t row_mask = 0;
+                    if(auto it = row_masks.find(row_key); it != row_masks.end()) row_mask = it->second;
+                    if(row_key == start_row_key) row_mask &= upper_one_mask(start_row_offset);
+                    if(row_key ==   end_row_key) row_mask &= lower_one_mask(  end_row_offset);
+
+                    if(row_mask) return (row_key << 4) | LSB(row_mask).value();
+                }
             }
         }
         return std::nullopt;
-    super_done:
-        res_block_key = (res_super_key << 6) | res_super_offset;// block key = {super key(12bit), offset(6bit)}
-        const uint64_t current_block = block_masks[res_block_key] //we already confirm that this block non-empty, and hence will not insert zero line
-            & upper_one_mask(lower_block_offset)
-            & lower_one_mask(upper_block_offset);
-        if(!current_block)return std::nullopt;
-        res_block_offset = LSB(current_block).value_or(0);
-        res_row_key = (res_block_key << 6)
-            | res_block_offset;
-        lower_row_offset = (res_block_key == start_block_key && res_block_offset == start_block_offset)? start_row_offset
-            : 0x00u;
-        upper_row_offset = (res_block_key == end_block_key && res_block_offset == end_block_offset)? end_row_offset
-            : 0x3fu;
-
-
-        const uint64_t current_row = row_masks[res_row_key]
-            & upper_one_mask(lower_row_offset)
-            & lower_one_mask(upper_row_offset);
-        if(!current_row)return std::nullopt;
-        res_row_offset = LSB(current_row).value_or(0);
-
-        return (res_row_key) << 4 | res_row_offset;
     }
     std::optional<Price_t> search_lower_active(Price_t start, Price_t end){
         assert(start >= end);
         assert(start <= Price_max);
         assert(  end <= Price_max);
-        //Price_t start_row_key   = start >> 4 ;
+        const Price_t start_row_key   = start >> 4 ;
         const Price_t start_block_key = start >> 10;
         const Price_t start_super_key = start >> 16;
         const Price_t start_row_offset  = start & 0x0f; // price[3:0]
         const Price_t start_block_offset= (start >> 4 ) & 0x3f; // price[9:4]
         const Price_t start_super_offset= (start >> 10) & 0x3f; // price[15:10]
 
-        //Price_t end_row_key   =    end >> 4 ;
+        const Price_t end_row_key   =    end >> 4 ;
         const Price_t end_block_key =    end >> 10;
         const Price_t end_super_key =    end >> 16;
         const Price_t end_row_offset  =  end & 0x0f; // price[3:0]
         const Price_t end_block_offset= (end >> 4 ) & 0x3f; // price[9:4]
         const Price_t end_super_offset= (end >> 10) & 0x3f; // price[15:10]
 
-        Price_t   lower_row_offset; //= start & 0x0f; // price[3:0]
-        Price_t lower_block_offset; //= (start >> 4 ) & 0x3f; // price[9:4]
+        for(int64_t s = start_super_key; s >= int64_t(end_super_key); s-- ){ // signed: s may reach 0
+            uint64_t super_mask = super_masks[s];
+            if(s == start_super_key) super_mask &= lower_one_mask(start_super_offset);
+            if(s ==   end_super_key) super_mask &= upper_one_mask(  end_super_offset);
 
-        Price_t   upper_row_offset; //= end & 0x0f; // price[3:0]
-        Price_t upper_block_offset; //= (end >> 4 ) & 0x3f; // price[9:4]
+            while(super_mask){
+                const Price_t block_offset = MSB(super_mask).value();
+                super_mask &= ~(1ull << block_offset); // clear the selected block bit
+                const Price_t block_key = (Price_t(s) << 6) | block_offset;
 
-        Price_t   res_row_key ;
-        Price_t res_block_key ;
-        Price_t res_super_key ;
-        Price_t   res_row_offset; // price[3:0]
-        Price_t res_block_offset; // price[9:4]
-        Price_t res_super_offset; // price[15:10]
+                uint64_t block_mask = 0;
+                if(auto it = block_masks.find(block_key); it != block_masks.end()) block_mask = it->second;
+                if(block_key == start_block_key) block_mask &= lower_one_mask(start_block_offset);
+                if(block_key ==   end_block_key) block_mask &= upper_one_mask(  end_block_offset);
 
-        for(int64_t i = start_super_key; i >= end_super_key; i-- ){ // i must be signed, otherwise will overflow at 0
-            uint64_t current_mask = super_masks[i];
-            if(i == start_super_key) current_mask &= lower_one_mask(start_super_offset);
-            if(i ==   end_super_key)current_mask &= upper_one_mask(  end_super_offset);
-            if(current_mask){
-                res_super_key    = i;
-                res_super_offset = MSB(current_mask).value_or(0);
-                lower_block_offset = (  end_super_key == res_super_key &&   end_super_offset == res_super_offset)? end_block_offset : 0x00u;
-                upper_block_offset = (start_super_key == res_super_key && start_super_offset == res_super_offset)?                start_block_offset // if start and end is in same super block, search until end block offset
-                : 0x3fu; //if start and end not in same super block, serch untill the end of block
-                goto super_done;
+                while(block_mask){
+                    const Price_t row_offset = MSB(block_mask).value();
+                    block_mask &= ~(1ull << row_offset); // clear the selected row bit
+                    const Price_t row_key = (block_key << 6) | row_offset;
+
+                    uint64_t row_mask = 0;
+                    if(auto it = row_masks.find(row_key); it != row_masks.end()) row_mask = it->second;
+                    if(row_key == start_row_key) row_mask &= lower_one_mask(start_row_offset);
+                    if(row_key ==   end_row_key) row_mask &= upper_one_mask(  end_row_offset);
+
+                    if(row_mask) return (row_key << 4) | MSB(row_mask).value();
+                }
             }
         }
         return std::nullopt;
-        super_done:
-        res_block_key = (res_super_key << 6) | res_super_offset;// block key = {super key(12bit), offset(6bit)}
-        const uint64_t current_block = block_masks[res_block_key]
-        & upper_one_mask(lower_block_offset)
-        & lower_one_mask(upper_block_offset);
-        if(!current_block)return std::nullopt;
-        res_block_offset = MSB(current_block).value_or(0);
-        res_row_key = (res_block_key << 6)
-        | res_block_offset;
-        upper_row_offset = (res_block_key == start_block_key && res_block_offset == start_block_offset)? start_row_offset
-        : 0x3fu;
-        lower_row_offset = (res_block_key == end_block_key && res_block_offset == end_block_offset)? end_row_offset
-        : 0x00u;
-
-
-        const uint64_t current_row = row_masks[res_row_key]
-        & upper_one_mask(lower_row_offset)
-        & lower_one_mask(upper_row_offset);
-        if(!current_row)return std::nullopt;
-        res_row_offset = MSB(current_row).value_or(0);
-
-        return (res_row_key) << 4 | res_row_offset;
     }
 };
 
