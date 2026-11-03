@@ -11,11 +11,11 @@
 #include "addr.hpp"
 
 struct PriceMeta {
-    QtySum_t level_sum ;
-    Pos_t    head_line ;//pos[27:4], Hint, NOT AUTHORIZED !!!
-    bool     head_valid;
-    Pos_t    tail_pos  ;
-    bool     active    ;
+    QtySum_t    level_sum ;
+    IDVol_key_t head_line ;//pos[27:4], Hint, NOT AUTHORIZED !!!
+    bool        head_valid;
+    Pos_t       tail_pos  ;
+    bool        active    ;
 };
 struct SideMeta{
     std::unordered_map<Price_t, PriceMeta> PriceMetaRAM;
@@ -211,7 +211,7 @@ struct BookMeta { // temporary, not RTL
         sides[Side_t::Buy ].reset();
         sides[Side_t::Sell].reset();
     }
-    void sync_level_after_write(Side_t side, Price_t price, QtySum_t old_sum, QtySum_t new_sum, Pos_t touched_line, QtySum_t touched_line_sum, Pos_t tail_pos);
+    void sync_level_after_write(Side_t side, Price_t price, IDVol_key_t touched_line, QtySum_t new_level_sum, QtySum_t new_line_sum, std::optional<Pos_t> tail_pos);
     std::optional<Price_t> best_ask(){return sides[Side_t::Sell].best;}       // 最低卖价
     std::optional<Price_t> best_bid(){return sides[Side_t::Buy ].best;}       // 最高买价
     std::optional<Price_t> next_ask_after(Price_t p, Price_t limit) // 从 p + 1 向上走下一个活跃卖价，止于 limit
@@ -227,19 +227,23 @@ struct BookMeta { // temporary, not RTL
 
     uint64_t get_version(){return version;}
 
-    PriceMeta get_price_meta(Side_t side, Price_t price){
-        if(sides[side].PriceMetaRAM.find(price) == sides[side].PriceMetaRAM.end())return PriceMeta();
+    std::optional<PriceMeta> get_price_meta(Side_t side, Price_t price){
+        if(sides[side].PriceMetaRAM.find(price) == sides[side].PriceMetaRAM.end())return std::nullopt;
         return sides[side].PriceMetaRAM[price];
     }
 
-    std::optional<Pos_t> get_meta_head_line(Side_t side, Price_t price){
+    std::optional<IDVol_key_t> get_meta_head_line(Side_t side, Price_t price){
         if(sides[side].PriceMetaRAM.find(price) == sides[side].PriceMetaRAM.end())return std::nullopt;
         if(sides[side].PriceMetaRAM[price].head_valid)return sides[side].PriceMetaRAM[price].head_line;
         else return std::nullopt;
 
     }
+    std::optional<Pos_t> get_meta_tail(Side_t side, Price_t price){
+        if(sides[side].PriceMetaRAM.find(price) == sides[side].PriceMetaRAM.end())return std::nullopt;
+        return sides[side].PriceMetaRAM[price].tail_pos;
+    }
 
-    void  set_meta_head_line(Side_t side, Price_t price, Pos_t head_line){
+    void  set_meta_head_line(Side_t side, Price_t price, IDVol_key_t head_line){
         PriceMeta p = sides[side].PriceMetaRAM[price];
         p.head_line = head_line;
         p.head_valid = true;
@@ -248,7 +252,7 @@ struct BookMeta { // temporary, not RTL
     }
 };
 
-inline void BookMeta::sync_level_after_write(Side_t side, Price_t price, QtySum_t old_sum, QtySum_t new_sum, Pos_t touched_line, QtySum_t touched_line_sum, Pos_t tail_pos)
+inline void BookMeta::sync_level_after_write(Side_t side, Price_t price, IDVol_key_t touched_line, QtySum_t new_level_sum, QtySum_t new_line_sum, std::optional<Pos_t> tail_pos)
 {
     if(sides[side].PriceMetaRAM.find(price) == sides[side].PriceMetaRAM.end()){
         sides[side].PriceMetaRAM[price] = PriceMeta();
@@ -256,7 +260,7 @@ inline void BookMeta::sync_level_after_write(Side_t side, Price_t price, QtySum_
     PriceMeta &p = sides[side].PriceMetaRAM[price];
 
     bool was_active = p.active;
-    bool is_active  = (new_sum != 0);
+    bool is_active  = (new_level_sum != 0);
 
     // Modify PriceMeta
     if(!was_active && !is_active){
@@ -275,7 +279,7 @@ inline void BookMeta::sync_level_after_write(Side_t side, Price_t price, QtySum_
         p.head_line = touched_line; // at this time head = tail-1 = last modified position
     }
     else if ( was_active &&  is_active){
-        if (p.head_valid && p.head_line == touched_line && touched_line_sum == 0 ){
+        if (p.head_valid && p.head_line == touched_line && new_line_sum == 0 ){
             p.head_valid = false;
         }
     }
@@ -293,6 +297,6 @@ inline void BookMeta::sync_level_after_write(Side_t side, Price_t price, QtySum_
     }
 
     // update level_sum and tail_pos
-    p.level_sum = new_sum;
-    p.tail_pos  = tail_pos;
+    p.level_sum = new_level_sum;
+    if(tail_pos.has_value())p.tail_pos  = tail_pos.value();
 }

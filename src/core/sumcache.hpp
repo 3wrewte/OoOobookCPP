@@ -10,6 +10,8 @@
 struct LineSumMap { // a temporary substitution of LineSumCache, write immediate, actually not RTL structure!!!
   std::unordered_map<uint64_t, std::array<QtySum_t,16>> ram;  // key = line_key
 
+  void reset(){ram.clear();}
+
   void apply_delta(LineSumCacheView addr, QtyDelta_t delta) // write-through
   {
     assert(LineSumCacheViewValid(addr));
@@ -50,6 +52,8 @@ struct LineSumMap { // a temporary substitution of LineSumCache, write immediate
 
 struct LevelSumMap { // a temporary substitution of LevelSumCache, write immediate, actually not RTL structure!!!
   std::unordered_map<uint64_t, std::array<QtySum_t,16>> ram;  // key = line_key
+
+  void reset(){ram.clear();}
 
   void apply_delta(LevelSumCacheView addr, QtyDelta_t delta) // write-through
   {

@@ -109,14 +109,14 @@ TEST_CASE("book meta price meta retains tail after level drains") {
     BookMeta m;
     m.reset();
     m.sync_level_after_write(Side_t::Buy, 0x10, 0, 7, 3, 7, 49);
-    const PriceMeta meta = m.get_price_meta(Side_t::Buy, 0x10);
+    const PriceMeta meta = m.get_price_meta(Side_t::Buy, 0x10).value_or(PriceMeta());
     CHECK(meta.tail_pos == 49);
     CHECK(meta.head_line == 3);
     CHECK(meta.head_valid);
     CHECK(meta.level_sum == 7);
 
     m.sync_level_after_write(Side_t::Buy, 0x10, 7, 0, 3, 0, 49);
-    const PriceMeta retained = m.get_price_meta(Side_t::Buy, 0x10);
+    const PriceMeta retained = m.get_price_meta(Side_t::Buy, 0x10).value_or(PriceMeta());
     CHECK(retained.tail_pos == 49);
     CHECK_FALSE(retained.active);
     CHECK_FALSE(retained.head_valid);
@@ -147,7 +147,7 @@ TEST_CASE("book meta reset clears summaries and version") {
     CHECK(m.best_ask() == std::nullopt);
     CHECK(m.best_bid() == std::nullopt);
     CHECK(m.get_version() == 0);
-    CHECK(m.get_price_meta(Side_t::Sell, 0x10).active == false);
+    CHECK(m.get_price_meta(Side_t::Sell, 0x10).value_or(PriceMeta()).active == false);
     CHECK(m.next_ask_after(0, Price_max) == std::nullopt);
 }
 
