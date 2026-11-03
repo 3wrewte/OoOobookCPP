@@ -49,14 +49,13 @@ struct IdVolMap { // also not RTL yet
     // read through, does not fill cache line(since it does not exist yet)
     Qty_t    slot_volume      (CanonicalAddr_t addr);   // 单槽，从 ram 读
     Line     read_line        (CanonicalAddr_t addr);   // 整 line 快照
-    QtySum_t line_volume      (CanonicalAddr_t addr);   // = read_line 求和
     QtySum_t line_sum_ram     (CanonicalAddr_t addr);   // line_sum.read_single_through
     QtySum_t level_sum_ram    (CanonicalAddr_t addr);   // level_sum.read_single_through
     QtySum_t tail_ram         (CanonicalAddr_t addr);   // tail.read_single_through
-    std::array<QtySum_t,16> read_line_sum_row (CanonicalAddr_t addr);  // line_sum.read_row_through
-    std::array<QtySum_t,16> read_level_sum_row(CanonicalAddr_t addr);  // level_sum.read_row_through
-    std::optional<Pos_t> meta_head_line(CanonicalAddr_t addr);         // meta.get_meta_head_line
-    void set_meta_head_line(CanonicalAddr_t addr, Pos_t);              // meta.set_meta_head_line
+    std::array<QtySum_t,16>  read_line_sum_row (CanonicalAddr_t addr);  // line_sum.read_row_through
+    std::array<QtySum_t,16>  read_level_sum_row(CanonicalAddr_t addr);  // level_sum.read_row_through
+    std::optional<IDVol_key_t>   meta_head_line(CanonicalAddr_t addr);         // meta.get_meta_head_line
+    void set_meta_head_line(CanonicalAddr_t addr, IDVol_key_t head_line);              // meta.set_meta_head_line
 
     // write-immediate
     void         take_line   (CanonicalAddr_t addr, VolLine delta_vec, QtySum_t delta_sum);// delta_vec and delta_sum is negtive delta, that is, the consumed delta
@@ -72,13 +71,6 @@ inline void IdVolMap::reset()
     tail.reset();
     meta.reset();
     ram.clear();
-}
-
-inline Qty_t IdVolMap::slot_volume(CanonicalAddr_t addr){
-    const IDVolCacheView view = IDVolCacheIndexing(addr);
-    const IDVol_key_t key = get_IDVol_key(view);
-    if(ram.find(key) == ram.end())return 0;
-    return ram[key].Vols[view.offset];
 }
 
 inline void IdVolMap::take_line(CanonicalAddr_t addr, VolLine delta_vec, QtySum_t delta_sum)
@@ -180,4 +172,48 @@ inline CancelResult IdVolMap::cancel_slot_with_volume(CanonicalAddr_t addr, Orde
 inline CancelResult IdVolMap::cancel_slot(CanonicalAddr_t addr, OrderID_t id)
 {
     return cancel_slot_with_volume(addr, id, Qty_max);
+}
+
+inline Qty_t IdVolMap::slot_volume(CanonicalAddr_t addr){
+    const IDVolCacheView view = IDVolCacheIndexing(addr);
+    const IDVol_key_t key = get_IDVol_key(view);
+    if(ram.find(key) == ram.end())return 0;
+    return ram[key].Vols[view.offset];
+}
+
+inline Line     IdVolMap::read_line        (CanonicalAddr_t addr){
+    const IDVolCacheView view = IDVolCacheIndexing(addr);
+    const IDVol_key_t key = get_IDVol_key(view);
+    if(ram.find(key) == ram.end())return Line();
+    return ram[key];
+}
+
+inline QtySum_t IdVolMap::line_sum_ram     (CanonicalAddr_t addr){
+    const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
+    return line_sum.read_single_through(LineSumCacheIndexing(addr_structured));
+}
+
+inline QtySum_t IdVolMap::level_sum_ram    (CanonicalAddr_t addr){
+    const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
+    return level_sum.read_single_through(LevelSumCacheIndexing(addr_structured));
+}
+inline QtySum_t IdVolMap::tail_ram         (CanonicalAddr_t addr){
+    const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
+    return tail.read_single_through(LevelSumCacheIndexing(addr_structured));
+}
+inline std::array<QtySum_t,16>  IdVolMap::read_line_sum_row (CanonicalAddr_t addr){
+    const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
+    return line_sum.read_row_through(LineSumCacheIndexing(addr_structured));}
+
+inline std::array<QtySum_t,16>  IdVolMap::read_level_sum_row(CanonicalAddr_t addr){
+    const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
+    return level_sum.read_row_through(LevelSumCacheIndexing(addr_structured));
+}
+inline std::optional<IDVol_key_t>     IdVolMap::meta_head_line(CanonicalAddr_t addr){
+    const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
+    return meta.get_meta_head_line(addr_structured.side, addr_structured.price);
+}
+inline void IdVolMap::set_meta_head_line(CanonicalAddr_t addr, IDVol_key_t head_line){
+    const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
+    meta.set_meta_head_line(addr_structured.side, addr_structured.price, head_line);
 }
