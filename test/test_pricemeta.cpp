@@ -12,16 +12,20 @@
 
 // Ports of the Rust `meta.rs` tests, plus boundary coverage for the current
 // three-level active-price summaries. The C++ `BookMeta` exposes `reset()`
-// instead of Rust's `BookMeta::new()`, and `sync_level_after_write` requires a
-// concrete tail position instead of an Option, so the helper below supplies
-// the same neutral values Rust's `sync_level` uses.
+// instead of Rust's `BookMeta::new()`. `sync_level_after_write` dropped the
+// redundant `old_sum` argument (the previous active state is read from the
+// retained `PriceMeta`), takes `new_level_sum` + `new_line_sum`, and accepts an
+// optional tail position; the helper below supplies the same neutral values
+// Rust's `sync_level` uses.
 
 namespace {
 
-void sync_level(BookMeta& m, Side_t side, Price_t price, QtySum_t old_sum,
+void sync_level(BookMeta& m, Side_t side, Price_t price, QtySum_t /*old_sum*/,
                 QtySum_t new_sum) {
-    m.sync_level_after_write(side, price, old_sum, new_sum, 0,
-                             new_sum > 0 ? 1 : 0, 0);
+    m.sync_level_after_write(side, price, /*touched_line*/ 0,
+                             /*new_level_sum*/ new_sum,
+                             /*new_line_sum*/ new_sum > 0 ? 1 : 0,
+                             /*tail_pos*/ 0);
 }
 
 size_t side_index(Side_t side) {
@@ -108,14 +112,18 @@ TEST_CASE("book meta summaries jump across empty rows blocks and super blocks") 
 TEST_CASE("book meta price meta retains tail after level drains") {
     BookMeta m;
     m.reset();
-    m.sync_level_after_write(Side_t::Buy, 0x10, 0, 7, 3, 7, 49);
+    m.sync_level_after_write(Side_t::Buy, 0x10, /*touched_line*/ 3,
+                             /*new_level_sum*/ 7, /*new_line_sum*/ 7,
+                             /*tail_pos*/ 49);
     const PriceMeta meta = m.get_price_meta(Side_t::Buy, 0x10).value_or(PriceMeta());
     CHECK(meta.tail_pos == 49);
     CHECK(meta.head_line == 3);
     CHECK(meta.head_valid);
     CHECK(meta.level_sum == 7);
 
-    m.sync_level_after_write(Side_t::Buy, 0x10, 7, 0, 3, 0, 49);
+    m.sync_level_after_write(Side_t::Buy, 0x10, /*touched_line*/ 3,
+                             /*new_level_sum*/ 0, /*new_line_sum*/ 0,
+                             /*tail_pos*/ 49);
     const PriceMeta retained = m.get_price_meta(Side_t::Buy, 0x10).value_or(PriceMeta());
     CHECK(retained.tail_pos == 49);
     CHECK_FALSE(retained.active);
@@ -126,10 +134,14 @@ TEST_CASE("book meta price meta retains tail after level drains") {
 TEST_CASE("book meta head invalidates when current head line drains") {
     BookMeta m;
     m.reset();
-    m.sync_level_after_write(Side_t::Sell, 0x10, 0, 10, 5, 10, 90);
+    m.sync_level_after_write(Side_t::Sell, 0x10, /*touched_line*/ 5,
+                             /*new_level_sum*/ 10, /*new_line_sum*/ 10,
+                             /*tail_pos*/ 90);
     CHECK(m.get_meta_head_line(Side_t::Sell, 0x10) == 5);
 
-    m.sync_level_after_write(Side_t::Sell, 0x10, 10, 4, 5, 0, 90);
+    m.sync_level_after_write(Side_t::Sell, 0x10, /*touched_line*/ 5,
+                             /*new_level_sum*/ 4, /*new_line_sum*/ 0,
+                             /*tail_pos*/ 90);
     CHECK(m.get_meta_head_line(Side_t::Sell, 0x10) == std::nullopt);
 
     m.set_meta_head_line(Side_t::Sell, 0x10, 6);
