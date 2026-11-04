@@ -78,7 +78,7 @@ inline void IdVolMap::take_line(CanonicalAddr_t addr, VolLine delta_vec, QtySum_
     const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
     const IDVolCacheView view = IDVolCacheIndexing(addr);
     const IDVol_key_t key = get_IDVol_key(view);
-    assert(ram.find(key) != ram.end()); // empty line cannot be take
+    //assert(ram.find(key) != ram.end()); // empty line cannot be take
     const Line old_line = ram[key];
     Line new_line = Line();
     bool non_empty = false;

@@ -21,8 +21,8 @@ struct TakeLineResult{
 inline TakeLineResult TakeLineCalc(const Line & line, const Qty_t& budget){
     Qty_t remaining_budget = budget;
     QtySum_t remaining_volume = 0;
-    VolLine vol_vec;
-    IDLine  id_vec ;
+    VolLine vol_vec{};
+    IDLine  id_vec {};
     for(size_t i = 0; i < 16; i++){
         if(remaining_budget && line.Vols[i]){
             id_vec[i] = line.IDs[i];
@@ -47,7 +47,7 @@ inline TakeLineResult TakeLineCalc(const Line & line, const Qty_t& budget){
 //     submitted    = 0b0000
 // };
 
-enum class UopKind { TakeLine, InsertSlot, CancelSlot};
+enum class UopKind { TakeLine, InsertSlot, CancelSlot, End};
 
 struct CanonicalEvent {
     UopKind kind;
@@ -56,16 +56,9 @@ struct CanonicalEvent {
     //MopSeq parent_mop;
     //UopSeq uop_seq;
     bool op_end;
+    std::variant<std::monostate, TakeLineResult, CancelResult> payload;
     /* payload: Take(traded_ids,take_vols,consumed) | Insert | Cancel | End */
 };
-
-struct TakeCanonicalEvent : CanonicalEvent{
-    TakeLineResult result;
-};
-struct CancelCanonicalEvent : CanonicalEvent{
-    CancelResult result;
-};
-
 
 struct Uop {
     UopKind kind;
@@ -73,25 +66,9 @@ struct Uop {
     // MopSeq          parent_mop;
     OpSeq           op_seq    ;
     bool            op_end    ;
-    CanonicalAddr_t addr      ; // Take: addr = line_key << line_bits, Insert/Cancel: addr
-    uint32_t        imm       ; // Take: budget, Insert: volume, Cancel: target_id
+    CanonicalAddr_t addr      ; // Take: addr = line_key << line_bits, Insert/Cancel: addr, End: 0
+    uint32_t        imm       ; // Take: budget, Insert: volume, Cancel: target_id, End: 0
 };
-/*
-struct TakeUop : Uop{
-    IDVol_key_t lineaddr;
-    Qty_t budget;
-};
-
-struct InsertUop : Uop{
-    CanonicalAddr_t addr;
-    Qty_t volume;
-};
-
-struct CancelUop : Uop{
-    CanonicalAddr_t addr;
-    OrderID_t target_id;
-};*/
-
 
 struct UopQueue{ // substitution of Uop ROB, hence using a different name, since single-clock,
     // std::queue<  TakeUop>   TakeQueue;//since single-clock, these queues are wire, not registers, and hence do not need head, // tail, size
@@ -134,7 +111,6 @@ inline void UopQueue::alloc(size_t num, std::vector<Uop>& uops)
 inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
 {
     std::vector<CanonicalEvent> results;
-    //first, exec insert since there will not be any hazard
     while(!uop_queue.empty()){
         Uop uop = uop_queue.front();
         uop_queue.pop();
@@ -147,12 +123,13 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
 
             // commit
             idvol.take_line(uop.addr, take_result.trade_vol_vec, take_result.consumed);
-            TakeCanonicalEvent res = TakeCanonicalEvent{.result = take_result};
-            res.kind = uop.kind;
-            res.id = uop.id;
-            res.op_seq = uop.op_seq;
-            res.op_end = uop.op_end;
-            results.push_back(res);
+            results.push_back(CanonicalEvent{
+                .kind    = uop.kind   ,
+                .id      = uop.id     ,
+                .op_seq  = uop.op_seq ,
+                .op_end  = uop.op_end ,
+                .payload = take_result
+            });
             //commit end
         }else if(uop.kind == UopKind::InsertSlot){
             // non exec
@@ -160,10 +137,11 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
             // commit
             idvol.insert_slot(uop.addr, uop.id, uop.imm);
             results.push_back(CanonicalEvent{
-                .kind = uop.kind,
-                .id = uop.id,
-                .op_seq = uop.op_seq,
-                .op_end = uop.op_end
+                .kind    = uop.kind        ,
+                .id      = uop.id          ,
+                .op_seq  = uop.op_seq      ,
+                .op_end  = uop.op_end      ,
+                .payload = std::monostate{}
             });
             //commit end
         }else if(uop.kind == UopKind::CancelSlot){
@@ -171,13 +149,25 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
 
             // commit
             CancelResult cancel_result = idvol.cancel_slot(uop.addr, uop.imm);
-            CancelCanonicalEvent res = CancelCanonicalEvent{.result = cancel_result};
-            res.kind = uop.kind;
-            res.id = uop.id;
-            res.op_seq = uop.op_seq;
-            res.op_end = uop.op_end;
-            results.push_back(res);
+            results.push_back(CanonicalEvent{
+                .kind    = uop.kind     ,
+                .id      = uop.id       ,
+                .op_seq  = uop.op_seq   ,
+                .op_end  = uop.op_end   ,
+                .payload = cancel_result
+            });
             // commit end
+        }else if(uop.kind == UopKind::End){
+            //non exec
+
+            // commit
+            results.push_back(CanonicalEvent{
+                .kind    = uop.kind        ,
+                .id      = uop.id          ,
+                .op_seq  = uop.op_seq      ,
+                .op_end  = uop.op_end      ,
+                .payload = std::monostate{}
+            });
         }
     }
     return results;
@@ -188,7 +178,7 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
 inline void UopQueue::reset()
 {
     uop_queue = {};
-    ready_num = ~(0u);
+    ready_num = std::numeric_limits<size_t>::max();
     alloc_lock.reset();
 }
 
@@ -200,6 +190,6 @@ inline void UopQueue::prepare()
 
 inline void UopQueue::commit()
 {
-    ready_num = ~(0u);
+    ready_num = std::numeric_limits<size_t>::max();
     alloc_lock.commit();
 }
