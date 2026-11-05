@@ -58,7 +58,7 @@ struct CanonicalEvent {
     bool op_end;
     std::variant<std::monostate, TakeLineResult, CancelResult> payload;
     /* payload: Take(traded_ids,take_vols,consumed) | Insert | Cancel | End */
-    CanonicalBookSnapshot snapshot;
+    std::optional<CanonicalBookSnapshot> snapshot;
 };
 
 struct Uop {
@@ -124,7 +124,8 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
 
             // commit
             idvol.take_line(uop.addr, take_result.trade_vol_vec, take_result.consumed);
-            const CanonicalBookSnapshot snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
+            std::optional<CanonicalBookSnapshot> snapshot = std::nullopt;
+            if (uop.op_end) snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
             results.push_back(CanonicalEvent{
                 .kind    = uop.kind   ,
                 .id      = uop.id     ,
@@ -139,7 +140,8 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
 
             // commit
             idvol.insert_slot(uop.addr, uop.id, uop.imm);
-            const CanonicalBookSnapshot snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
+            std::optional<CanonicalBookSnapshot> snapshot = std::nullopt;
+            if (uop.op_end) snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
             results.push_back(CanonicalEvent{
                 .kind    = uop.kind        ,
                 .id      = uop.id          ,
@@ -154,7 +156,8 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
 
             // commit
             CancelResult cancel_result = idvol.cancel_slot(uop.addr, uop.imm);
-            const CanonicalBookSnapshot snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
+            std::optional<CanonicalBookSnapshot> snapshot = std::nullopt;
+            if (uop.op_end) snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
             results.push_back(CanonicalEvent{
                 .kind    = uop.kind     ,
                 .id      = uop.id       ,
@@ -168,7 +171,8 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
             //non exec
 
             // commit
-            const CanonicalBookSnapshot snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
+            std::optional<CanonicalBookSnapshot> snapshot = std::nullopt;
+            if (uop.op_end) snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
             results.push_back(CanonicalEvent{
                 .kind    = uop.kind        ,
                 .id      = uop.id          ,

@@ -49,7 +49,7 @@ inline std::pair<size_t, std::vector<Uop> > MopQueue::issue(LineSumMap & Virtual
 
             const LevelAddrStructured moplevel = LevelAddrUnpack(Canonical_to_LevelAddr(mop.addr));
             const Pos_t head_line = idvol.meta_head_line(Canonical_to_LevelAddr(mop.addr)).value_or(0);
-            const Pos_t tail = idvol.tail_ram(mop.addr);
+            const Pos_t tail = idvol.tail_ram(mop.addr) & ((1 << Pos_bits) - 1);
             const Pos_t tail_line = tail >> 4;
 
             const Qty_t &total_budget = mop.imm;
@@ -90,7 +90,7 @@ inline std::pair<size_t, std::vector<Uop> > MopQueue::issue(LineSumMap & Virtual
             assert(remaining_budget == 0);
         }
         else if(mop.kind == MopKind::InsertLevel){
-            const Pos_t tail = idvol.tail_ram(mop.addr);
+            const Pos_t tail = idvol.tail_ram(mop.addr) & ((1 << Pos_bits) - 1);
             const LevelAddrStructured moplevel = LevelAddrUnpack(Canonical_to_LevelAddr(mop.addr));
             results.push_back(Uop{
                 .kind = UopKind::InsertSlot,

@@ -218,6 +218,14 @@ inline LevelSumCacheView LevelSumCacheIndexing (const CanonicalAddrStructured &a
         .offset = LevelSum_offset_t( a.price & 0x0000'000f)
     };
 }
+inline LevelSumCacheView LevelSumCacheIndexing (const LevelAddrStructured &a){
+    assert(LevelAddrStructuredValid(a));
+    return LevelSumCacheView{
+        .tag    = LevelSum_tag_t   ((a.sym << 20) | ((a.price & 0x0fff'ff00) >> 8)),
+        .index  = LevelSum_index_t ((a.side << 4) | ((a.price & 0x0000'00f0) >> 4)),
+        .offset = LevelSum_offset_t( a.price & 0x0000'000f)
+    };
+}
 
 inline uint64_t upper_one_mask(uint64_t s){ // including bit s itself  {1, ..., 1, 1(bit s), 0, ...(s zeros in total), 0}
     if (s == 64) return 0ull;

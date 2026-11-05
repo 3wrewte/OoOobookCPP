@@ -59,10 +59,7 @@ struct DoubleBufferRegister {
     
 };
 
-
-/*
 template <typename T>
-struct PendingChangeRegister {};
-*/
+using Register = DoubleBufferRegister<T>;
 
 #endif
