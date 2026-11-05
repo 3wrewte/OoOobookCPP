@@ -47,8 +47,8 @@ using LevelSum_index_t  = uint8_t ; // { B/S, price[7:4] }   5 bits -> 16 * 2 li
 using LevelSum_offset_t = uint8_t ; // {price[3:0] }         4 bits -> 16 level-sums per line
 using LevelSum_key_t    = uint32_t; // {tag, index}
 
-constexpr size_t PriceMetaAddr_bits   = 36; // {sym, B/S, price} 36 bits
-using PriceMetaAddr_t   = uint64_t; // {sym, B/S, price} 36 bits
+constexpr size_t LevelAddr_bits   = 36; // {sym, B/S, price} 36 bits
+using LevelAddr_t   = uint64_t; // {sym, B/S, price} 36 bits
 
 struct CanonicalAddrStructured {
     Sym_t   sym;   // 7 bits
@@ -80,6 +80,49 @@ inline CanonicalAddrStructured  CanonicalAddrUnpack(const CanonicalAddr_t &addr)
         .pos   = Pos_t  (((addr & 0x01ff'fffe'0000'0000) >> 29)  |  ((addr & 0x0f)     ))
     };
 }
+
+struct LevelAddrStructured {
+    Sym_t   sym;   // 7 bits
+    Side_t  side;  // 0 = Buy, 1 = Sell (already the side bit)
+    Price_t price; // 28 bits
+};
+
+inline bool LevelAddrStructuredValid(const LevelAddrStructured& a) {
+    return a.sym   < (1u << Sym_bits)
+    && a.price < (1ull << Price_bits);
+}
+
+inline LevelAddr_t LevelAddrPack(const LevelAddrStructured& a){
+    assert(LevelAddrStructuredValid(a));
+    return (LevelAddr_t(a.sym) << 29)
+    | ((a.side & 0b1) << 28)
+    |   a.price;
+}
+inline LevelAddrStructured  LevelAddrUnpack(const LevelAddr_t &addr){
+    return LevelAddrStructured{
+        .sym   = Sym_t   ((addr & 0x0000'000f'e000'0000) >> 29),
+        .side  = Side_t  ((addr & 0x0000'0000'1000'0000) >> 28),
+        .price = Price_t ((addr & 0x0000'0000'0fff'ffff)      )
+    };
+}
+inline LevelAddr_t Canonical_to_LevelAddr(CanonicalAddr_t addr){
+    CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
+    return LevelAddrPack(LevelAddrStructured{
+        .sym = addr_structured.sym,
+        .side = addr_structured.side,
+        .price = addr_structured.price
+    });
+}
+inline CanonicalAddr_t Level_to_CanonicalAddr(LevelAddr_t addr){
+    LevelAddrStructured addr_structured = LevelAddrUnpack(addr);
+    return CanonicalAddrPack(CanonicalAddrStructured{
+        .sym = addr_structured.sym,
+        .side = addr_structured.side,
+        .price = addr_structured.price,
+        .pos = 0
+    });
+}
+
 
 struct IDVolCacheView {
     IDVol_tag_t    tag   ;   // 55 bits

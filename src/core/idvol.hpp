@@ -51,8 +51,8 @@ struct IdVolMap { // also not RTL yet
     QtySum_t tail_ram         (CanonicalAddr_t addr);   // tail.read_single_through
     std::array<QtySum_t,16>  read_line_sum_row (CanonicalAddr_t addr);  // line_sum.read_row_through
     std::array<QtySum_t,16>  read_level_sum_row(CanonicalAddr_t addr);  // level_sum.read_row_through
-    std::optional<IDVol_key_t>   meta_head_line(CanonicalAddr_t addr);         // meta.get_meta_head_line
-    void set_meta_head_line(CanonicalAddr_t addr, IDVol_key_t head_line);              // meta.set_meta_head_line
+    std::optional<Pos_t>   meta_head_line(LevelAddr_t level);         // meta.get_meta_head_line
+    void set_meta_head_line(LevelAddr_t level, Pos_t head_line);              // meta.set_meta_head_line
     CanonicalBookSnapshot get_snapshot(Sym_t sym);
 
     // write-immediate
@@ -207,12 +207,12 @@ inline std::array<QtySum_t,16>  IdVolMap::read_level_sum_row(CanonicalAddr_t add
     const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
     return level_sum.read_row_through(LevelSumCacheIndexing(addr_structured));
 }
-inline std::optional<IDVol_key_t>     IdVolMap::meta_head_line(CanonicalAddr_t addr){
-    const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
+inline std::optional<Pos_t>     IdVolMap::meta_head_line(LevelAddr_t level){
+    const LevelAddrStructured addr_structured = LevelAddrUnpack(level);
     return meta.get_meta_head_line(addr_structured.side, addr_structured.price);
 }
-inline void IdVolMap::set_meta_head_line(CanonicalAddr_t addr, IDVol_key_t head_line){
-    const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
+inline void IdVolMap::set_meta_head_line(LevelAddr_t level, Pos_t head_line){
+    const LevelAddrStructured addr_structured = LevelAddrUnpack(level);
     meta.set_meta_head_line(addr_structured.side, addr_structured.price, head_line);
 }
 

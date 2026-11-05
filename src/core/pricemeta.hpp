@@ -12,7 +12,7 @@
 
 struct PriceMeta {
     QtySum_t    level_sum ;
-    IDVol_key_t head_line ;//pos[27:4], Hint, NOT AUTHORIZED !!!
+    Pos_t       head_line ;//pos[27:4], Hint, NOT AUTHORIZED !!!
     bool        head_valid;
     Pos_t       tail_pos  ;
     bool        active    ;
@@ -232,7 +232,7 @@ struct BookMeta { // temporary, not RTL
         return sides[side].PriceMetaRAM[price];
     }
 
-    std::optional<IDVol_key_t> get_meta_head_line(Side_t side, Price_t price){
+    std::optional<Pos_t> get_meta_head_line(Side_t side, Price_t price){
         if(sides[side].PriceMetaRAM.find(price) == sides[side].PriceMetaRAM.end())return std::nullopt;
         if(sides[side].PriceMetaRAM[price].head_valid)return sides[side].PriceMetaRAM[price].head_line;
         else return std::nullopt;
@@ -243,7 +243,7 @@ struct BookMeta { // temporary, not RTL
         return sides[side].PriceMetaRAM[price].tail_pos;
     }
 
-    void  set_meta_head_line(Side_t side, Price_t price, IDVol_key_t head_line){
+    void  set_meta_head_line(Side_t side, Price_t price, Pos_t head_line){
         PriceMeta p = sides[side].PriceMetaRAM[price];
         p.head_line = head_line;
         p.head_valid = true;
@@ -270,16 +270,16 @@ inline void BookMeta::sync_level_after_write(Side_t side, Price_t price, IDVol_k
     else if (!was_active &&  is_active){
         p.active = true;
         p.head_valid = true;
-        p.head_line = touched_line; // this modification activates the level
+        p.head_line = CanonicalAddrUnpack(touched_line << 4).pos >> 4; // this modification activates the level
 
     }
     else if ( was_active && !is_active){
         p.active = false;
         p.head_valid = false;
-        p.head_line = touched_line; // at this time head = tail-1 = last modified position
+        p.head_line = CanonicalAddrUnpack(touched_line << 4).pos >> 4; // at this time head = tail-1 = last modified position
     }
     else if ( was_active &&  is_active){
-        if (p.head_valid && p.head_line == touched_line && new_line_sum == 0 ){
+        if (p.head_valid && p.head_line == CanonicalAddrUnpack(touched_line << 4).pos >> 4 && new_line_sum == 0 ){
             p.head_valid = false;
         }
     }
