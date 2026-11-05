@@ -24,6 +24,12 @@ struct DoubleBufferRegister {
         phase=false;
         driven = false;
     }
+    void reset(T t){
+        bank[0]=t;
+        bank[1]=t;
+        phase=false;
+        driven = false;
+    }
     
     void prepare(){
         assert(global_phase == Phase::Prepare);

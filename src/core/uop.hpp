@@ -56,7 +56,7 @@ struct CanonicalEvent {
     //MopSeq parent_mop;
     //UopSeq uop_seq;
     bool op_end;
-    std::variant<std::monostate, TakeLineResult, CancelResult> payload;
+    std::variant<std::monostate, TakeLineResult, CanonicalAddr_t, CancelResult> payload;
     /* payload: Take(traded_ids,take_vols,consumed) | Insert | Cancel | End */
     std::optional<CanonicalBookSnapshot> snapshot;
 };
@@ -147,7 +147,7 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
                 .id      = uop.id          ,
                 .op_seq  = uop.op_seq      ,
                 .op_end  = uop.op_end      ,
-                .payload = std::monostate{},
+                .payload = uop.addr        ,
                 .snapshot= snapshot
             });
             //commit end
