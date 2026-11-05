@@ -58,6 +58,7 @@ struct CanonicalEvent {
     bool op_end;
     std::variant<std::monostate, TakeLineResult, CancelResult> payload;
     /* payload: Take(traded_ids,take_vols,consumed) | Insert | Cancel | End */
+    CanonicalBookSnapshot snapshot;
 };
 
 struct Uop {
@@ -123,12 +124,14 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
 
             // commit
             idvol.take_line(uop.addr, take_result.trade_vol_vec, take_result.consumed);
+            const CanonicalBookSnapshot snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
             results.push_back(CanonicalEvent{
                 .kind    = uop.kind   ,
                 .id      = uop.id     ,
                 .op_seq  = uop.op_seq ,
                 .op_end  = uop.op_end ,
-                .payload = take_result
+                .payload = take_result,
+                .snapshot= snapshot
             });
             //commit end
         }else if(uop.kind == UopKind::InsertSlot){
@@ -136,12 +139,14 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
 
             // commit
             idvol.insert_slot(uop.addr, uop.id, uop.imm);
+            const CanonicalBookSnapshot snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
             results.push_back(CanonicalEvent{
                 .kind    = uop.kind        ,
                 .id      = uop.id          ,
                 .op_seq  = uop.op_seq      ,
                 .op_end  = uop.op_end      ,
-                .payload = std::monostate{}
+                .payload = std::monostate{},
+                .snapshot= snapshot
             });
             //commit end
         }else if(uop.kind == UopKind::CancelSlot){
@@ -149,24 +154,28 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
 
             // commit
             CancelResult cancel_result = idvol.cancel_slot(uop.addr, uop.imm);
+            const CanonicalBookSnapshot snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
             results.push_back(CanonicalEvent{
                 .kind    = uop.kind     ,
                 .id      = uop.id       ,
                 .op_seq  = uop.op_seq   ,
                 .op_end  = uop.op_end   ,
-                .payload = cancel_result
+                .payload = cancel_result,
+                .snapshot= snapshot
             });
             // commit end
         }else if(uop.kind == UopKind::End){
             //non exec
 
             // commit
+            const CanonicalBookSnapshot snapshot = idvol.get_snapshot(CanonicalAddrUnpack(uop.addr).sym);
             results.push_back(CanonicalEvent{
                 .kind    = uop.kind        ,
                 .id      = uop.id          ,
                 .op_seq  = uop.op_seq      ,
                 .op_end  = uop.op_end      ,
-                .payload = std::monostate{}
+                .payload = std::monostate{},
+                .snapshot= snapshot
             });
         }
     }

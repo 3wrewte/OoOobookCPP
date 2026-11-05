@@ -5,8 +5,7 @@
 #include "sumcache.hpp"
 #include "pricemeta.hpp"
 
-//struct Slot { OrderID_t order_id; Qty_t volume; };   // 洞 = {0,0}
-//struct Line { std::array<Slot, 16> slots; };
+
 using IDLine   = std::array<OrderID_t, 16>;
 using VolLine  = std::array<Qty_t    , 16>;
 struct Line{
@@ -27,16 +26,14 @@ struct CancelResult {
     Qty_t volume_removed;
 };
 
-// enum class UopApplyKind { Take, Insert, Cancel }; // should be in uOP
-// struct UopMutation {
-//     CanonicalAddr_t addr;
-//     IDVol_key_t     line_key;
-//     IDVol_index_t   index;   // 窗口命中用，golden 暂不用
-//     IDVol_tag_t     tag;     // 同上
-//     Line old_line, new_line;
-//     QtyDelta_t tail_delta;   // 0 或 +1（仅 insert）
-// };
-//接口：golden 直接改版（M1 现在写这套）
+
+struct CanonicalBookSnapshot {
+    std::optional<Price_t> bid_price;
+    std::optional<Price_t> ask_price;
+    QtySum_t               bid_qty  ;
+    QtySum_t               ask_qty  ;
+};
+
 struct IdVolMap { // also not RTL yet
     std::unordered_map<IDVol_key_t, Line > ram ;
     LineSumMap  line_sum;
@@ -56,6 +53,7 @@ struct IdVolMap { // also not RTL yet
     std::array<QtySum_t,16>  read_level_sum_row(CanonicalAddr_t addr);  // level_sum.read_row_through
     std::optional<IDVol_key_t>   meta_head_line(CanonicalAddr_t addr);         // meta.get_meta_head_line
     void set_meta_head_line(CanonicalAddr_t addr, IDVol_key_t head_line);              // meta.set_meta_head_line
+    CanonicalBookSnapshot get_snapshot(Sym_t sym);
 
     // write-immediate
     void         take_line   (CanonicalAddr_t addr, VolLine delta_vec, QtySum_t delta_sum);// delta_vec and delta_sum is negtive delta, that is, the consumed delta
@@ -216,4 +214,28 @@ inline std::optional<IDVol_key_t>     IdVolMap::meta_head_line(CanonicalAddr_t a
 inline void IdVolMap::set_meta_head_line(CanonicalAddr_t addr, IDVol_key_t head_line){
     const CanonicalAddrStructured addr_structured = CanonicalAddrUnpack(addr);
     meta.set_meta_head_line(addr_structured.side, addr_structured.price, head_line);
+}
+
+inline CanonicalBookSnapshot IdVolMap::get_snapshot(Sym_t sym)
+{
+    const std::optional<Price_t> bid = meta.best_bid();
+    const std::optional<Price_t> ask = meta.best_ask();
+    const LevelSumCacheView bid_level = LevelSumCacheIndexing(CanonicalAddrStructured{
+        .sym   = sym            ,
+        .side  = Side_t::Buy    ,
+        .price = bid.value_or(0),
+        .pos   = 0
+    });
+    const LevelSumCacheView ask_level = LevelSumCacheIndexing(CanonicalAddrStructured{
+        .sym   = sym            ,
+        .side  = Side_t::Sell   ,
+        .price = ask.value_or(0),
+        .pos   = 0
+    });
+    return CanonicalBookSnapshot{
+        .bid_price = bid,
+        .ask_price = ask,
+        .bid_qty   = level_sum.read_single_through(bid_level),
+        .ask_qty   = level_sum.read_single_through(ask_level)
+    };
 }
