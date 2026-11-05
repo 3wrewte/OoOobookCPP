@@ -28,6 +28,13 @@ void sync_level(BookMeta& m, Side_t side, Price_t price, QtySum_t /*old_sum*/,
                              /*tail_pos*/ 0);
 }
 
+// `sync_level_after_write` takes the touched id-vol line as a line key; the
+// stored head hint is a line number (pos[27:4]). Build the key for a line.
+IDVol_key_t touched_line_key(Pos_t line_no) {
+    const CanonicalAddrStructured a{0, Side_t::Buy, 0, Pos_t(line_no << 4)};
+    return get_IDVol_key(IDVolCacheIndexing(CanonicalAddrPack(a)));
+}
+
 size_t side_index(Side_t side) {
     return static_cast<size_t>(side);
 }
@@ -112,7 +119,7 @@ TEST_CASE("book meta summaries jump across empty rows blocks and super blocks") 
 TEST_CASE("book meta price meta retains tail after level drains") {
     BookMeta m;
     m.reset();
-    m.sync_level_after_write(Side_t::Buy, 0x10, /*touched_line*/ 3,
+    m.sync_level_after_write(Side_t::Buy, 0x10, /*touched_line*/ touched_line_key(3),
                              /*new_level_sum*/ 7, /*new_line_sum*/ 7,
                              /*tail_pos*/ 49);
     const PriceMeta meta = m.get_price_meta(Side_t::Buy, 0x10).value_or(PriceMeta());
@@ -121,7 +128,7 @@ TEST_CASE("book meta price meta retains tail after level drains") {
     CHECK(meta.head_valid);
     CHECK(meta.level_sum == 7);
 
-    m.sync_level_after_write(Side_t::Buy, 0x10, /*touched_line*/ 3,
+    m.sync_level_after_write(Side_t::Buy, 0x10, /*touched_line*/ touched_line_key(3),
                              /*new_level_sum*/ 0, /*new_line_sum*/ 0,
                              /*tail_pos*/ 49);
     const PriceMeta retained = m.get_price_meta(Side_t::Buy, 0x10).value_or(PriceMeta());
@@ -134,12 +141,12 @@ TEST_CASE("book meta price meta retains tail after level drains") {
 TEST_CASE("book meta head invalidates when current head line drains") {
     BookMeta m;
     m.reset();
-    m.sync_level_after_write(Side_t::Sell, 0x10, /*touched_line*/ 5,
+    m.sync_level_after_write(Side_t::Sell, 0x10, /*touched_line*/ touched_line_key(5),
                              /*new_level_sum*/ 10, /*new_line_sum*/ 10,
                              /*tail_pos*/ 90);
     CHECK(m.get_meta_head_line(Side_t::Sell, 0x10) == 5);
 
-    m.sync_level_after_write(Side_t::Sell, 0x10, /*touched_line*/ 5,
+    m.sync_level_after_write(Side_t::Sell, 0x10, /*touched_line*/ touched_line_key(5),
                              /*new_level_sum*/ 4, /*new_line_sum*/ 0,
                              /*tail_pos*/ 90);
     CHECK(m.get_meta_head_line(Side_t::Sell, 0x10) == std::nullopt);

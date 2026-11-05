@@ -200,25 +200,27 @@ TEST_CASE("insert becomes visible and updates the BBO snapshot") {
     const Price_t p = 100;
 
     const std::vector<CanonicalEvent> ev =
-        h.run({insert_uop(0, A(0, p, Side_t::Buy), 42, 5)});
+        h.run({insert_uop(0, A(0, p, Side_t::Buy), 42, 5, true)});
 
     REQUIRE(ev.size() == 1);
     CHECK(ev[0].kind == UopKind::InsertSlot);
     CHECK(ev[0].id == 42);
     CHECK(ev[0].op_seq == 0);
-    CHECK_FALSE(ev[0].op_end);
-    CHECK(std::holds_alternative<std::monostate>(ev[0].payload));
+    CHECK(ev[0].op_end);
+    CHECK(std::holds_alternative<CanonicalAddr_t>(ev[0].payload));
+    CHECK(std::get<CanonicalAddr_t>(ev[0].payload) == A(0, p, Side_t::Buy));
 
     CHECK(h.idvol.slot_volume(A(0, p, Side_t::Buy)) == 5);
     CHECK(h.idvol.line_sum_ram(A(0, p, Side_t::Buy)) == 5);
     CHECK(h.idvol.level_sum_ram(A(0, p, Side_t::Buy)) == 5);
     CHECK(h.idvol.tail_ram(A(0, p, Side_t::Buy)) == 1);
 
-    REQUIRE(ev[0].snapshot.bid_price.has_value());
-    CHECK(*ev[0].snapshot.bid_price == p);
-    CHECK(ev[0].snapshot.bid_qty == 5);
-    CHECK_FALSE(ev[0].snapshot.ask_price.has_value());
-    CHECK(ev[0].snapshot.ask_qty == 0);
+    REQUIRE(ev[0].snapshot.has_value());
+    REQUIRE(ev[0].snapshot->bid_price.has_value());
+    CHECK(*ev[0].snapshot->bid_price == p);
+    CHECK(ev[0].snapshot->bid_qty == 5);
+    CHECK_FALSE(ev[0].snapshot->ask_price.has_value());
+    CHECK(ev[0].snapshot->ask_qty == 0);
 }
 
 TEST_CASE("two inserts at one level get consecutive FIFO positions") {
@@ -356,7 +358,8 @@ TEST_CASE("a take on an absent line is a no-op") {
     CHECK(sum_vols(r.trade_vol_vec) == 0);
     CHECK(h.idvol.ram.empty());
     CHECK(h.idvol.level_sum_ram(A(0, p, Side_t::Sell)) == 0);
-    CHECK_FALSE(ev[0].snapshot.ask_price.has_value());
+    REQUIRE(ev[0].snapshot.has_value());
+    CHECK_FALSE(ev[0].snapshot->ask_price.has_value());
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +372,7 @@ TEST_CASE("cancel clears the target slot and reports the removed volume") {
 
     const std::vector<CanonicalEvent> ev = h.run({
         insert_uop(0, A(0, p, Side_t::Sell), 42, 9),
-        cancel_uop(1, A(0, p, Side_t::Sell), 42),
+        cancel_uop(1, A(0, p, Side_t::Sell), 42, true),
     });
 
     REQUIRE(ev.size() == 2);
@@ -381,7 +384,8 @@ TEST_CASE("cancel clears the target slot and reports the removed volume") {
 
     CHECK(h.idvol.slot_volume(A(0, p, Side_t::Sell)) == 0);
     CHECK(h.idvol.level_sum_ram(A(0, p, Side_t::Sell)) == 0);
-    CHECK_FALSE(ev[1].snapshot.ask_price.has_value());
+    REQUIRE(ev[1].snapshot.has_value());
+    CHECK_FALSE(ev[1].snapshot->ask_price.has_value());
 }
 
 TEST_CASE("cancel with a mismatched order id is a no-op") {
@@ -390,7 +394,7 @@ TEST_CASE("cancel with a mismatched order id is a no-op") {
 
     const std::vector<CanonicalEvent> ev = h.run({
         insert_uop(0, A(0, p, Side_t::Buy), 42, 9),
-        cancel_uop(1, A(0, p, Side_t::Buy), 43),
+        cancel_uop(1, A(0, p, Side_t::Buy), 43, true),
     });
 
     REQUIRE(ev.size() == 2);
@@ -399,9 +403,10 @@ TEST_CASE("cancel with a mismatched order id is a no-op") {
     CHECK(c.volume_removed == 0);
 
     CHECK(h.idvol.slot_volume(A(0, p, Side_t::Buy)) == 9);
-    REQUIRE(ev[1].snapshot.bid_price.has_value());
-    CHECK(*ev[1].snapshot.bid_price == p);
-    CHECK(ev[1].snapshot.bid_qty == 9);
+    REQUIRE(ev[1].snapshot.has_value());
+    REQUIRE(ev[1].snapshot->bid_price.has_value());
+    CHECK(*ev[1].snapshot->bid_price == p);
+    CHECK(ev[1].snapshot->bid_qty == 9);
 }
 
 TEST_CASE("take skips a hole created by a cancel") {
@@ -449,9 +454,10 @@ TEST_CASE("End completes an OP without touching the book") {
 
     CHECK(h.idvol.slot_volume(A(0, p, Side_t::Buy)) == 4);
     CHECK(h.idvol.level_sum_ram(A(0, p, Side_t::Buy)) == 4);
-    REQUIRE(ev[1].snapshot.bid_price.has_value());
-    CHECK(*ev[1].snapshot.bid_price == p);
-    CHECK(ev[1].snapshot.bid_qty == 4);
+    REQUIRE(ev[1].snapshot.has_value());
+    REQUIRE(ev[1].snapshot->bid_price.has_value());
+    CHECK(*ev[1].snapshot->bid_price == p);
+    CHECK(ev[1].snapshot->bid_qty == 4);
 }
 
 TEST_CASE("events keep uop order and op_end markers") {
@@ -489,19 +495,21 @@ TEST_CASE("snapshot follows the best bid as its level drains") {
 
     const std::vector<CanonicalEvent> ev = h.run({
         insert_uop(0, A(0, 100, Side_t::Buy), 1, 5),
-        insert_uop(0, A(0,  99, Side_t::Buy), 2, 3),
-        take_uop(1, A(0, 100, Side_t::Buy), 5),
+        insert_uop(0, A(0,  99, Side_t::Buy), 2, 3, true),
+        take_uop(1, A(0, 100, Side_t::Buy), 5, true),
     });
 
     REQUIRE(ev.size() == 3);
     // After inserting 5@100 and 3@99 the best bid is still 100.
-    REQUIRE(ev[1].snapshot.bid_price.has_value());
-    CHECK(*ev[1].snapshot.bid_price == 100);
-    CHECK(ev[1].snapshot.bid_qty == 5);
+    REQUIRE(ev[1].snapshot.has_value());
+    REQUIRE(ev[1].snapshot->bid_price.has_value());
+    CHECK(*ev[1].snapshot->bid_price == 100);
+    CHECK(ev[1].snapshot->bid_qty == 5);
     // Draining 100 moves the best bid to 99.
-    REQUIRE(ev[2].snapshot.bid_price.has_value());
-    CHECK(*ev[2].snapshot.bid_price == 99);
-    CHECK(ev[2].snapshot.bid_qty == 3);
+    REQUIRE(ev[2].snapshot.has_value());
+    REQUIRE(ev[2].snapshot->bid_price.has_value());
+    CHECK(*ev[2].snapshot->bid_price == 99);
+    CHECK(ev[2].snapshot->bid_qty == 3);
 }
 
 TEST_CASE("snapshot exposes both sides independently") {
@@ -509,16 +517,17 @@ TEST_CASE("snapshot exposes both sides independently") {
 
     const std::vector<CanonicalEvent> ev = h.run({
         insert_uop(0, A(0, 100, Side_t::Buy),  1, 5),
-        insert_uop(0, A(0, 105, Side_t::Sell), 2, 7),
+        insert_uop(0, A(0, 105, Side_t::Sell), 2, 7, true),
     });
 
     REQUIRE(ev.size() == 2);
-    REQUIRE(ev[1].snapshot.bid_price.has_value());
-    REQUIRE(ev[1].snapshot.ask_price.has_value());
-    CHECK(*ev[1].snapshot.bid_price == 100);
-    CHECK(ev[1].snapshot.bid_qty == 5);
-    CHECK(*ev[1].snapshot.ask_price == 105);
-    CHECK(ev[1].snapshot.ask_qty == 7);
+    REQUIRE(ev[1].snapshot.has_value());
+    REQUIRE(ev[1].snapshot->bid_price.has_value());
+    REQUIRE(ev[1].snapshot->ask_price.has_value());
+    CHECK(*ev[1].snapshot->bid_price == 100);
+    CHECK(ev[1].snapshot->bid_qty == 5);
+    CHECK(*ev[1].snapshot->ask_price == 105);
+    CHECK(ev[1].snapshot->ask_qty == 7);
 }
 
 TEST_CASE("partial take reduces the best-level snapshot quantity") {
@@ -534,7 +543,8 @@ TEST_CASE("partial take reduces the best-level snapshot quantity") {
     const TakeLineResult& r = take_result(ev[1]);
     CHECK(r.consumed == 2);
     CHECK(r.line_remaining == 3);
-    REQUIRE(ev[1].snapshot.ask_price.has_value());
-    CHECK(*ev[1].snapshot.ask_price == p);
-    CHECK(ev[1].snapshot.ask_qty == 3);
+    REQUIRE(ev[1].snapshot.has_value());
+    REQUIRE(ev[1].snapshot->ask_price.has_value());
+    CHECK(*ev[1].snapshot->ask_price == p);
+    CHECK(ev[1].snapshot->ask_qty == 3);
 }

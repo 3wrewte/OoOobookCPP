@@ -341,20 +341,19 @@ TEST_CASE("head line hint points at the first line and invalidates on drain") {
     }
     c.insert_slot(A(0, 16, p, Side_t::Sell), 100, 1);
 
-    const IDVol_key_t first_key = get_IDVol_key(IDVolCacheIndexing(A(0, 0, p, Side_t::Sell)));
-    CHECK(c.meta_head_line(A(0, 0, p, Side_t::Sell)) == first_key);
+    const LevelAddr_t level = Canonical_to_LevelAddr(A(0, 0, p, Side_t::Sell));
+    CHECK(c.meta_head_line(level) == 0); // line 0 holds the FIFO head
 
     const VolLine consume_all = full_line(1);
     c.take_line(A(0, 0, p, Side_t::Sell), consume_all, 16);
 
     // The level still holds volume on line 1, but the head hint for the drained
     // line is invalidated and must be re-established by the scanner.
-    CHECK(c.meta_head_line(A(0, 0, p, Side_t::Sell)) == std::nullopt);
+    CHECK(c.meta_head_line(level) == std::nullopt);
     CHECK(c.level_sum_ram(A(0, 0, p, Side_t::Sell)) == 1);
 
-    const IDVol_key_t second_key = get_IDVol_key(IDVolCacheIndexing(A(0, 16, p, Side_t::Sell)));
-    c.set_meta_head_line(A(0, 0, p, Side_t::Sell), second_key);
-    CHECK(c.meta_head_line(A(0, 0, p, Side_t::Sell)) == second_key);
+    c.set_meta_head_line(level, 1);
+    CHECK(c.meta_head_line(level) == 1);
 }
 
 TEST_CASE("line-sum and level-sum rows expose 16 adjacent entries") {
@@ -383,7 +382,7 @@ TEST_CASE("reset clears ram, sums, tail and meta") {
     c.insert_slot(A(0, 1, p, Side_t::Sell), 2, 3);
     const Delta d = delta({{0, 2}});
     c.take_line(A(0, 0, p, Side_t::Sell), d.vec, d.sum);
-    REQUIRE(c.meta_head_line(A(0, 0, p, Side_t::Sell)).has_value());
+    REQUIRE(c.meta_head_line(Canonical_to_LevelAddr(A(0, 0, p, Side_t::Sell))).has_value());
 
     c.reset();
 
@@ -395,7 +394,7 @@ TEST_CASE("reset clears ram, sums, tail and meta") {
     CHECK(c.line_sum_ram(A(0, 0, p, Side_t::Sell)) == 0);
     CHECK(c.level_sum_ram(A(0, 0, p, Side_t::Sell)) == 0);
     CHECK(c.tail_ram(A(0, 0, p, Side_t::Sell)) == 0);
-    CHECK(c.meta_head_line(A(0, 0, p, Side_t::Sell)) == std::nullopt);
+    CHECK(c.meta_head_line(Canonical_to_LevelAddr(A(0, 0, p, Side_t::Sell))) == std::nullopt);
 
     // After reset the tail restarts from zero for the level.
     c.insert_slot(A(0, 0, p, Side_t::Sell), 9, 4);
