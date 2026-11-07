@@ -33,7 +33,7 @@ CanonicalAddr_t A(Pos_t pos, Price_t price, Side_t side, Sym_t sym = 0) {
 
 OPcontext Ctx(OPKind kind, uint64_t seq, OrderID_t id, Side_t side, Price_t price) {
     return OPcontext{kind, seq, /*ContractId*/ 0, /*AccountId*/ 0,
-                     /*ClientOrderId*/ 0, id, side, price};
+                     /*ClientOrderId*/ 0, id, side, price, /*qty*/ 0};
 }
 
 struct OPHarness {
