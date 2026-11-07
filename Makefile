@@ -1,5 +1,5 @@
-CXX      := g++
-CXXFLAGS := -std=c++2c -Wall -Wextra -I. -Ilibs -Itest
+CXX      := g++-16
+CXXFLAGS := -std=c++2c -Wall -Wextra -I. -Ilibs -Itest -Isrc
 
 TEST_MAIN := test/test_main.cpp
 TEST_SRCS := $(filter-out $(TEST_MAIN), $(wildcard test/*.cpp))

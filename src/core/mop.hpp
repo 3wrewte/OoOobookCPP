@@ -5,16 +5,7 @@
 #include "addr.hpp"
 #include "wire.hpp"
 #include "uop.hpp"
-enum class MopKind { TakeLevel, InsertLevel, CancelLevel, End};
-
-struct Mop {
-    MopKind         kind      ;
-    OrderID_t       id        ;
-    OpSeq           op_seq    ;
-    bool            op_end    ;
-    CanonicalAddr_t addr      ; // may use sym, side price instead Take/Insert: addr = Canonical addr(but only stores level information), Cancel: target_addr, End: 0
-    uint32_t        imm       ; // Take: budget, Insert: volume, Cancel: target_id, End: 0
-};
+#include "instructions.hpp"
 
 
 struct MopQueue{ // a  single-tick substitution of Mop ROB

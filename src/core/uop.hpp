@@ -9,14 +9,9 @@
 #include "addr.hpp"
 #include "idvol.hpp"
 #include "wire.hpp"
+#include "instructions.hpp"
 
-struct TakeLineResult{
-    IDLine   trade_id_vec    ;
-    VolLine  trade_vol_vec   ;
-    Qty_t    consumed        ;
-    //Qty_t    remaining_budget; // should always be zero
-    QtySum_t line_remaining  ; // needed or not?
-};
+
 
 inline TakeLineResult TakeLineCalc(const Line & line, const Qty_t& budget){
     Qty_t remaining_budget = budget;
@@ -47,29 +42,7 @@ inline TakeLineResult TakeLineCalc(const Line & line, const Qty_t& budget){
 //     submitted    = 0b0000
 // };
 
-enum class UopKind { TakeLine, InsertSlot, CancelSlot, End};
 
-struct CanonicalEvent {
-    UopKind kind;
-    OrderID_t id;
-    OpSeq op_seq;
-    //MopSeq parent_mop;
-    //UopSeq uop_seq;
-    bool op_end;
-    std::variant<std::monostate, TakeLineResult, CanonicalAddr_t, CancelResult> payload;
-    /* payload: Take(traded_ids,take_vols,consumed) | Insert | Cancel | End */
-    std::optional<CanonicalBookSnapshot> snapshot;
-};
-
-struct Uop {
-    UopKind kind;
-    OrderID_t       id        ;
-    // MopSeq          parent_mop;
-    OpSeq           op_seq    ;
-    bool            op_end    ;
-    CanonicalAddr_t addr      ; // Take: addr = line_key << line_bits, Insert/Cancel: addr, End: 0
-    uint32_t        imm       ; // Take: budget, Insert: volume, Cancel: target_id, End: 0
-};
 
 struct UopQueue{ // substitution of Uop ROB, hence using a different name, since single-clock,
     // std::queue<  TakeUop>   TakeQueue;//since single-clock, these queues are wire, not registers, and hence do not need head, // tail, size

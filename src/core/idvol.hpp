@@ -4,35 +4,8 @@
 #include "addr.hpp"
 #include "sumcache.hpp"
 #include "pricemeta.hpp"
+#include "instructions.hpp"
 
-
-using IDLine   = std::array<OrderID_t, 16>;
-using VolLine  = std::array<Qty_t    , 16>;
-struct Line{
-    IDLine  IDs ;
-    VolLine Vols;
-};
-
-// struct TakeResult { //not needed, uOP already know it when issue(when uOP ROB reads IDVol)
-//     std::array<OrderID_t,16> traded_ids;     // 每个 offset 碰到的 maker id，0=没吃
-//     std::array<Qty_t,16>      traded_vols;   // 每个 offset 吃掉的量
-//     Qty_t    consumed;                        // 本次总共吃掉
-//     Qty_t    remaining_budget;                // 0 = 预算满足
-//     QtySum_t line_remaining;                  // 吃完后这条 line 还剩多少
-// };
-struct CancelResult {
-    bool found;
-    OrderID_t order_id;
-    Qty_t volume_removed;
-};
-
-
-struct CanonicalBookSnapshot {
-    std::optional<Price_t> bid_price;
-    std::optional<Price_t> ask_price;
-    QtySum_t               bid_qty  ;
-    QtySum_t               ask_qty  ;
-};
 
 struct IdVolMap { // also not RTL yet
     std::unordered_map<IDVol_key_t, Line > ram ;

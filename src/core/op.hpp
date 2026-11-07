@@ -8,27 +8,7 @@
 #include "uop.hpp"
 #include "mop.hpp"
 #include "registers.hpp"
-enum class OPKind : uint8_t { Limit = 0b00, Market = 0b01, Cancel = 0b10};
-
-struct OP {
-    OrderID_t       id        ;
-    OPKind          kind      ;
-    Sym_t           sym       ;
-    Side_t          side      ;
-    uint32_t        imm0      ; // Limit: price, market: empty, Cancel: target_id
-    uint32_t        imm1      ; // Limit/market: qty, Cancel: empty
-};
-
-struct OPcontext{
-    OPKind          kind      ;
-    uint64_t Seq;
-    uint32_t ContractId;
-    uint64_t AccountId;
-    uint64_t ClientOrderId;
-    OrderID_t id;
-    Side_t   Side;
-    Price_t  Price;
-};
+#include "instructions.hpp"
 
 constexpr size_t   OP_ROB_LENGTH = 16;
 constexpr uint64_t OP_ROB_MASK   = OP_ROB_LENGTH - 1;
@@ -50,7 +30,7 @@ struct OPQueue{ // a  single-tick substitution of op ROB
     void prepare();
     void commit();
 
-    void alloc(size_t num, std::vector<OP> &ops, std::vector<OPcontext> &opcs);
+    void alloc(size_t valid_num, std::vector<OP> &ops, std::vector<OPcontext> &opcs);
 
 
     std::pair<size_t, std::vector<Mop> >  issue(LevelSumMap & VirtualLevelSum, IdVolMap & idvol); // will change to Line SumCache
@@ -58,11 +38,11 @@ struct OPQueue{ // a  single-tick substitution of op ROB
     std::vector<std::pair<OP,OPcontext> > release (std::vector<CanonicalEvent> &events);//listen to Canonical Event
 };
 
-inline void OPQueue::alloc(size_t num, std::vector<OP>& ops, std::vector<OPcontext> &opcs)
+inline void OPQueue::alloc(size_t valid_num, std::vector<OP>& ops, std::vector<OPcontext> &opcs)
 {
-    assert(num <= ops.size());
-    assert(num <= opcs.size());
-    assert(num <= ready_num());
+    assert(valid_num <= ops.size());
+    assert(valid_num <= opcs.size());
+    const size_t num = std::min(valid_num, ready_num()); // handshake
     alloc_lock.set(true);//prevent multi drive
     for(size_t i = 0; i < num; i++)op_queue       [(tail.get() + i) & OP_ROB_MASK] = ops[i];
     for(size_t i = 0; i < num; i++)opcontext_queue[(tail.get() + i) & OP_ROB_MASK] = opcs[i];

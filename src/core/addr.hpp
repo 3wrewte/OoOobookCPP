@@ -2,6 +2,7 @@
 #define ADDR_H
 #include <cstdint>
 #include <cstddef>
+#include <array>
 #include <bit>
 #include <tuple>
 #include <cassert>
@@ -123,6 +124,13 @@ inline CanonicalAddr_t Level_to_CanonicalAddr(LevelAddr_t addr){
     });
 }
 
+
+using IDLine   = std::array<OrderID_t, 16>;
+using VolLine  = std::array<Qty_t    , 16>;
+struct Line{
+    IDLine  IDs ;
+    VolLine Vols;
+};
 
 struct IDVolCacheView {
     IDVol_tag_t    tag   ;   // 55 bits
