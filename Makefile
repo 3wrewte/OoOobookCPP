@@ -3,7 +3,7 @@ CXXFLAGS := -std=c++2c -Wall -Wextra -I. -Ilibs -Itest -Isrc
 
 TEST_MAIN := test/test_main.cpp
 TEST_SRCS := $(filter-out $(TEST_MAIN), $(wildcard test/*.cpp))
-TEST_HDRS := $(wildcard src/core/*.hpp)
+TEST_HDRS := $(wildcard src/*/*.hpp)
 
 .PHONY: all test clean
 
