@@ -15,7 +15,7 @@ constexpr uint64_t OP_ROB_MASK   = OP_ROB_LENGTH - 1;
 constexpr size_t   OP_ROB_BITS = 4;
 struct OPQueue{ // a  single-tick substitution of op ROB
     std::array<OP, OP_ROB_LENGTH> op_queue; // register!!!, but write-immediate,read-through
-    std::array<OPcontext, OP_ROB_LENGTH> opcontext_queue;
+    //std::array<OPcontext, OP_ROB_LENGTH> opcontext_queue;
     wire<bool> alloc_lock;
     Register<uint32_t> head;
     Register<uint32_t> issued_tail; // = non-issued head
@@ -30,22 +30,22 @@ struct OPQueue{ // a  single-tick substitution of op ROB
     void prepare();
     void commit();
 
-    void alloc(size_t valid_num, std::vector<OP> &ops, std::vector<OPcontext> &opcs);
+    void alloc(size_t valid_num, std::vector<OP> &ops/*, std::vector<OPcontext> &opcs*/);
 
 
     std::pair<size_t, std::vector<Mop> >  issue(LevelSumMap & VirtualLevelSum, IdVolMap & idvol); // will change to Line SumCache
 
-    std::vector<std::pair<OP,OPcontext> > release (std::vector<CanonicalEvent> &events);//listen to Canonical Event
+    std::vector</*std::pair<OP,OPcontext>*/OP> release (std::vector<CanonicalEvent> &events);//listen to Canonical Event
 };
 
-inline void OPQueue::alloc(size_t valid_num, std::vector<OP>& ops, std::vector<OPcontext> &opcs)
+inline void OPQueue::alloc(size_t valid_num, std::vector<OP>& ops/*, std::vector<OPcontext> &opcs*/)
 {
     assert(valid_num <= ops.size());
-    assert(valid_num <= opcs.size());
+    //assert(valid_num <= opcs.size());
     const size_t num = std::min(valid_num, ready_num()); // handshake
     alloc_lock.set(true);//prevent multi drive
     for(size_t i = 0; i < num; i++)op_queue       [(tail.get() + i) & OP_ROB_MASK] = ops[i];
-    for(size_t i = 0; i < num; i++)opcontext_queue[(tail.get() + i) & OP_ROB_MASK] = opcs[i];
+    //for(size_t i = 0; i < num; i++)opcontext_queue[(tail.get() + i) & OP_ROB_MASK] = opcs[i];
     tail.set((tail.get() + num) & OP_ROB_MASK);
 }
 
@@ -161,7 +161,7 @@ inline std::pair<size_t, std::vector<Mop> > OPQueue::issue(LevelSumMap & Virtual
             }
         }
         else if(op.kind == OPKind::NOOP){
-            assert(op.id = 0);// no op.id for NOOP
+            assert(op.id == 0);// no op.id for NOOP
             results.push_back(Mop{
                 .kind = MopKind::End,
                 .id = op.id,
@@ -176,14 +176,16 @@ inline std::pair<size_t, std::vector<Mop> > OPQueue::issue(LevelSumMap & Virtual
     return std::make_pair(results.size(), results);
 }
 
-inline std::vector<std::pair<OP,OPcontext> > OPQueue::release (std::vector<CanonicalEvent> &events){
-    std::vector<std::pair<OP,OPcontext> > res;
+inline std::vector</*std::pair<OP,OPcontext>*/OP > OPQueue::release (std::vector<CanonicalEvent> &events){
+    //std::vector<std::pair<OP,OPcontext> > res;
+    std::vector<OP> res;
     size_t commit_front = head.get();
     for(auto &i : events){
         if(i.op_end){
             assert(i.id == op_queue[commit_front].id);
             assert(i.op_seq == commit_front);
-            res.push_back(std::make_pair(op_queue[commit_front], opcontext_queue[commit_front]));
+            res.push_back(op_queue[commit_front]);
+            //res.push_back(std::make_pair(op_queue[commit_front], opcontext_queue[commit_front]));
             commit_front = (commit_front + 1) & ((1 << OP_ROB_BITS) - 1);
         }
         if(i.kind == UopKind::InsertSlot){
@@ -197,7 +199,7 @@ inline std::vector<std::pair<OP,OPcontext> > OPQueue::release (std::vector<Canon
 inline void OPQueue::reset()
 {
     op_queue = {};
-    opcontext_queue = {};
+    //opcontext_queue = {};
     alloc_lock.reset();
     head.reset();
     tail.reset();

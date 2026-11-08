@@ -27,10 +27,12 @@ inline void IDallocator::prepare(){}
 inline void IDallocator::commit(){}
 
 inline OP IDallocator::allocate(OPcontext &opc){
-    const OrderID_t id = count;
-    count++;
-    map_out[id] = opc;
-    map_in[{opc.AccountId, opc.ClientOrderId}] = id;
+    const OrderID_t id = (opc.kind != OPKind::Cancel)? count : 0;
+    if(opc.kind != OPKind::Cancel){
+        count++;
+        map_out[id] = opc;
+        map_in[{opc.AccountId, opc.ClientOrderId}] = id;
+    }
     if(opc.ContractId >=128)return NOOP;
     uint32_t imm0, imm1;
     if(opc.kind == OPKind::Limit){
