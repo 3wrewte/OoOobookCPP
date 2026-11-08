@@ -15,7 +15,7 @@ struct IDallocator{
     void prepare();
     void commit();
 
-    std::optional<OP> allocate(OPcontext &opc);
+    OP allocate(OPcontext &opc);
     std::optional<OPcontext> get(OrderID_t id);
 };
 inline void IDallocator::reset(){
@@ -26,25 +26,25 @@ inline void IDallocator::reset(){
 inline void IDallocator::prepare(){}
 inline void IDallocator::commit(){}
 
-inline std::optional<OP> IDallocator::allocate(OPcontext &opc){
+inline OP IDallocator::allocate(OPcontext &opc){
     const OrderID_t id = count;
     count++;
     map_out[id] = opc;
     map_in[{opc.AccountId, opc.ClientOrderId}] = id;
-    if(opc.ContractId >=128)return std::nullopt;
+    if(opc.ContractId >=128)return NOOP;
     uint32_t imm0, imm1;
     if(opc.kind == OPKind::Limit){
-        if(opc.qty >= Price_max)return std::nullopt;
+        if(opc.qty >= Price_max)return NOOP;
         imm0 = opc.Price;
         imm1 = opc.qty;
     }
     else if(opc.kind == OPKind::Market){
-        if(opc.qty >= Price_max)return std::nullopt;
+        if(opc.qty >= Price_max)return NOOP;
         imm0 = 0;
         imm1 = opc.qty;
     }
     else if(opc.kind == OPKind::Cancel){
-        if (map_in.find({opc.AccountId, opc.ClientOrderId}) == map_in.end()) return std::nullopt;
+        if (map_in.find({opc.AccountId, opc.ClientOrderId}) == map_in.end()) return NOOP;
         imm0 = map_in[{opc.AccountId, opc.ClientOrderId}];
         imm1 = 0;
     }

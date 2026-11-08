@@ -160,6 +160,17 @@ inline std::pair<size_t, std::vector<Mop> > OPQueue::issue(LevelSumMap & Virtual
                 });
             }
         }
+        else if(op.kind == OPKind::NOOP){
+            assert(op.id = 0);// no op.id for NOOP
+            results.push_back(Mop{
+                .kind = MopKind::End,
+                .id = op.id,
+                .op_seq = op_seq,
+                .op_end = true,
+                .addr = 0,
+                .imm = 0
+            });
+        }
     }
     else issued_tail.set(issued_tail.get()); // nothing issue
     return std::make_pair(results.size(), results);

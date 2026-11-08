@@ -5,7 +5,7 @@
 #include "addr.hpp"
 
 
-enum class OPKind : uint8_t { Limit = 0b00, Market = 0b01, Cancel = 0b10};
+enum class OPKind : uint8_t { Limit = 0b10, Market = 0b11, Cancel = 0b01, NOOP = 0b00};
 
 struct OP {
     OrderID_t       id        ;
@@ -26,6 +26,15 @@ struct OPcontext{
     Side_t   Side;
     Price_t  Price;
     Qty_t    qty;
+};
+
+constexpr OP NOOP = OP{
+    .id = 0,
+    .kind = OPKind::NOOP,
+    .sym = 0,
+    .side = Side_t(0),
+    .imm0 = 0,
+    .imm1 = 0
 };
 
 
