@@ -16,6 +16,7 @@ struct top{
     void reset  ();
     void prepare();
     void commit ();
+    void finish ();
 
     void comb   ();
     bool end_flag();//instructions empty && OP ROB empty
@@ -34,13 +35,14 @@ int main(int argc, char** argv){
         global_phase = Phase::Commit;
         top_u.commit();
     }
+    top_u.finish();
     return 0;
 }
 
-top::top(){
-    instructions = InstructionsFromCSV("build/orders.csv");
-    trades       = TradeStreamToCSV   ("build/trades.csv");
-    ticks        = TickStreamToCSV    ("build/ticks.csv" );
+top::top()
+    : instructions("build/orders.csv"),
+      trades      ("build/trades.csv"),
+      ticks       ("build/ticks.csv") {
 }
 
 void top::reset  (){
@@ -65,13 +67,17 @@ void top::commit (){
     ticks       .commit();
 }
 
+void top::finish(){
+    trades.finish();
+    ticks.finish();
+}
 void top::comb(){
     const std::vector<OPcontext> opcs = instructions.issue(core.op_queue.ready_num());
     std::vector<OP> ops;
     for(auto i : opcs){
         ops.push_back(id_allocator.allocate(i));
     }
-    auto [event_num, events] = core.comb(instructions.get_valid_num(), ops);
+    auto [event_num, events] = core.comb(ops.size(), ops);
     auto lookup = [&](OrderID_t id){ return id_allocator.get(id); };
     trades.record(event_num, events, lookup);
     ticks.record(event_num, events, lookup);

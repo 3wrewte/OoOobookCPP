@@ -27,32 +27,45 @@ inline void IDallocator::prepare(){}
 inline void IDallocator::commit(){}
 
 inline OP IDallocator::allocate(OPcontext &opc){
-    const OrderID_t id = (opc.kind != OPKind::Cancel)? count : 0;
-    if(opc.kind != OPKind::Cancel){
-        count++;
-        map_out[id] = opc;
-        map_in[{opc.AccountId, opc.ClientOrderId}] = id;
-    }
-    if(opc.ContractId >=128)return NOOP;
-    uint32_t imm0, imm1;
-    if(opc.kind == OPKind::Limit){
-        if(opc.qty >= Price_max)return NOOP;
-        imm0 = opc.Price;
-        imm1 = opc.qty;
-    }
-    else if(opc.kind == OPKind::Market){
-        if(opc.qty >= Price_max)return NOOP;
+    // One unique op id per input row so the output stage can always recover the
+    // taker context, including Cancel / no-op rows.
+    const OrderID_t op_id = count++;
+    opc.id = op_id;
+
+    uint32_t imm0 = 0, imm1 = 0;
+    OPKind kind = opc.kind;
+
+    if (opc.ContractId >= 128) {
+        kind = OPKind::NOOP;
+    } else if (opc.kind == OPKind::Limit) {
+        if (opc.Price > Price_max) {
+            kind = OPKind::NOOP;
+        } else {
+            imm0 = opc.Price;
+            imm1 = opc.qty;
+        }
+    } else if (opc.kind == OPKind::Market) {
         imm0 = 0;
         imm1 = opc.qty;
+    } else if (opc.kind == OPKind::Cancel) {
+        const auto it = map_in.find({opc.AccountId, opc.ClientOrderId});
+        if (it == map_in.end()) {
+            kind = OPKind::NOOP;
+        } else {
+            imm0 = it->second;
+        }
+    } else {
+        kind = OPKind::NOOP;
     }
-    else if(opc.kind == OPKind::Cancel){
-        if (map_in.find({opc.AccountId, opc.ClientOrderId}) == map_in.end()) return NOOP;
-        imm0 = map_in[{opc.AccountId, opc.ClientOrderId}];
-        imm1 = 0;
+
+    map_out[op_id] = opc; // context for the output stage (Cancel / NOOP included)
+    if (kind == OPKind::Limit || kind == OPKind::Market) {
+        map_in[{opc.AccountId, opc.ClientOrderId}] = op_id;
     }
+
     return OP{
-        .id = id,
-        .kind = opc.kind,
+        .id = op_id,
+        .kind = kind,
         .sym = uint8_t(opc.ContractId),
         .side = opc.Side,
         .imm0 = imm0,
