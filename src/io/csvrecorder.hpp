@@ -1,37 +1,50 @@
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <fstream>
+#include <functional>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "core/instructions.hpp"
 #include "core/types.hpp"
 
 // ---------------------------------------------------------------------------
-// CSV output module.
+// CSV output modules.
 //
-// This is deliberately a *formatter*, not a reconstructor. The runtime owns the
-// bookkeeping needed to turn canonical events into exchange-level rows:
-//   - the taker's OP context (seq / side / client order id),
-//   - the maker's client order id and resting price (IDallocator / resting map),
-//   - the cumulative tick counters (trade_count / total_volume / last_*).
-// Trying to derive those from `CanonicalEvent` alone loses the seq and the
-// maker price, so the runtime fills a TradeRow / TickRow and the module only
-// formats and buffers it.
+// Layering:
+//   - `OutputStreamToCSV` is the buffered file (a base class only).
+//   - `TradeStreamToCSV`  turns canonical events into trades.csv rows.
+//   - `TickStreamToCSV`   turns canonical events into ticks.csv rows.
 //
-// Module contract matches the rest of the project:
-//   reset()   -> open the file and write the header (initialisation only)
-//   prepare() -> clear the wire buffer
-//   record()  -> append one formatted row to the wire buffer
-//   commit()  -> drain the wire buffer into the file
-//   finish()  -> flush and close (call once at the end of the run)
+// The main entry is:
+//
+//   stream.record(valid_num, events, lookup);
+//
+//   events  canonical events in uOP commit order (this tick)
+//   lookup  internal order id -> OPcontext; the runtime passes
+//           `[&](OrderID_t id){ return bookkeeping.get(id); }`
+//
+// `lookup` is used twice:
+//   - at `op_end`, with `event.id`, to get the taker's seq / side / client id;
+//   - for every non-zero take slot, with the maker id, to get the maker's
+//     client id and resting price.
+//
+// The single-row `record(TradeRow)` / `record(TickRow)` overloads are kept as an
+// escape hatch for tests and for callers that already reconstructed the row.
+//
+// The two streams are separate classes: a trade stream never carries tick
+// counters and a tick stream never writes a trade row, so neither object has a
+// half-unused mode. They share only the file/buffer plumbing.
 // ---------------------------------------------------------------------------
 
 struct TradeRow {
     Seq      seq                    ;
     uint64_t trade_idx              ; // 1-based, global across the run
-    uint64_t taker_client_order_id   ; // crosscheck "taker_order_id" column
+    uint64_t taker_client_order_id  ; // crosscheck "taker_order_id" column
     uint64_t maker_client_order_id  ; // crosscheck "maker_order_id" column
     Side_t   taker_side             ;
     Price_t  price                  ; // maker (resting) price
@@ -54,6 +67,9 @@ inline constexpr const char* TradeCSVHeader =
     "seq,trade_idx,taker_order_id,maker_order_id,taker_side,price,qty";
 inline constexpr const char* TickCSVHeader =
     "seq,bid_price,bid_qty,ask_price,ask_qty,last_price,last_qty,trade_count,volume";
+
+// The only dependency on bookkeeping: a lookup for an order id.
+using OrderLookup = std::function<std::optional<OPcontext>(OrderID_t)>;
 
 inline std::string format_trade_row(const TradeRow& row) {
     std::string line;
@@ -97,57 +113,221 @@ inline std::string format_tick_row(const TickRow& row) {
     return line;
 }
 
-struct OutputStreamToCSV{
-    // treat the external file as a register
-    std::string filename;
-    std::string header;
-    std::vector<std::string> write_buffer; // wire
-    std::ofstream out;
+// ---------------------------------------------------------------------------
+// OutputStreamToCSV: buffered file.
+//
+//   reset()   -> open the file and write the header
+//   prepare() -> clear the wire buffer
+//   record()  -> append one formatted line
+//   commit()  -> drain the wire buffer into the file
+//   finish()  -> flush and close (call once at the end of the run)
+// ---------------------------------------------------------------------------
+class OutputStreamToCSV {
+public:
+    OutputStreamToCSV(std::string filename, std::string header)
+        : filename_(std::move(filename)), header_(std::move(header)) {}
 
-    explicit OutputStreamToCSV(std::string name, std::string header_line)
-        : filename(std::move(name)), header(std::move(header_line)) {}
+    virtual ~OutputStreamToCSV() = default;
 
     OutputStreamToCSV(const OutputStreamToCSV&) = delete;
     OutputStreamToCSV& operator=(const OutputStreamToCSV&) = delete;
 
-    void reset  ();// open file
-    void prepare();// clear all wires, that is, buffers
-    void commit ();// output data to file
-    void finish ();// flush and close
+    virtual void reset() {
+        write_buffer_.clear();
+        out_.open(filename_, std::ios::out | std::ios::trunc);
+        if (!out_.is_open()) {
+            throw std::runtime_error("OutputStreamToCSV: cannot open '" + filename_ + "'");
+        }
+        out_ << header_ << '\n';
+    }
 
-    //size_t get_ready_num() const {    } // for static_length record, not needed for now
+    void prepare() {
+        write_buffer_.clear();
+    }
 
-    void record(std::string line) { write_buffer.push_back(std::move(line)); }
-    void record(const TradeRow& row) { record(format_trade_row(row)); }
-    void record(const TickRow&  row) { record(format_tick_row(row)); }
+    void commit() {
+        if (!out_.is_open()) {
+            throw std::runtime_error("OutputStreamToCSV: commit before reset on '" + filename_ + "'");
+        }
+        for (const std::string& line : write_buffer_) {
+            out_ << line << '\n';
+        }
+    }
+
+    void finish() {
+        if (!out_.is_open()) {
+            throw std::runtime_error("OutputStreamToCSV: finish before reset on '" + filename_ + "'");
+        }
+        out_.flush();
+        out_.close();
+    }
+
+    void record(std::string line) {
+        write_buffer_.push_back(std::move(line));
+    }
+
+protected:
+    std::string filename_;
+    std::string header_;
+    std::vector<std::string> write_buffer_; // wire
+    std::ofstream out_;
 };
 
-inline void OutputStreamToCSV::reset(){
-    write_buffer.clear();
-    out.open(filename, std::ios::out | std::ios::trunc);
-    if (!out.is_open()) {
-        throw std::runtime_error("OutputStreamToCSV: cannot open '" + filename + "'");
-    }
-    out << header << '\n';
-}
+// ---------------------------------------------------------------------------
+// TradeStreamToCSV
+// ---------------------------------------------------------------------------
+class TradeStreamToCSV : public OutputStreamToCSV {
+public:
+    explicit TradeStreamToCSV(std::string filename)
+        : OutputStreamToCSV(std::move(filename), TradeCSVHeader) {}
 
-inline void OutputStreamToCSV::prepare(){
-    write_buffer.clear();
-}
+    void reset() override {
+        OutputStreamToCSV::reset();
+        next_trade_id_ = 1;
+        pending_.clear();
+    }
 
-inline void OutputStreamToCSV::commit(){
-    if (!out.is_open()) {
-        throw std::runtime_error("OutputStreamToCSV: commit before reset on '" + filename + "'");
-    }
-    for (const std::string& line : write_buffer) {
-        out << line << '\n';
-    }
-}
+    using OutputStreamToCSV::record;
 
-inline void OutputStreamToCSV::finish(){
-    if (!out.is_open()) {
-        throw std::runtime_error("OutputStreamToCSV: finish before reset on '" + filename + "'");
+    void record(const TradeRow& row) {
+        OutputStreamToCSV::record(format_trade_row(row));
     }
-    out.flush();
-    out.close();
-}
+
+    // Consume the first `valid_num` events; emit one row per non-zero take
+    // slot, at each op_end, using the taker context from `lookup(event.id)`.
+    void record(std::size_t valid_num,
+                const std::vector<CanonicalEvent>& events,
+                const OrderLookup& lookup) {
+        const std::size_t n = std::min(valid_num, events.size());
+
+        for (std::size_t i = 0; i < n; ++i) {
+            const CanonicalEvent& ev = events[i];
+
+            if (ev.kind == UopKind::TakeLine) {
+                const auto& take = std::get<TakeLineResult>(ev.payload);
+                for (std::size_t slot = 0; slot < take.trade_vol_vec.size(); ++slot) {
+                    if (take.trade_vol_vec[slot] != 0) {
+                        pending_.push_back(PendingTrade{take.trade_id_vec[slot],
+                                                        take.trade_vol_vec[slot]});
+                    }
+                }
+            }
+
+            if (ev.op_end) {
+                const auto taker = lookup(ev.id);
+                if (!taker) {
+                    throw std::runtime_error(
+                        "TradeStreamToCSV: no context for op id " + std::to_string(ev.id));
+                }
+
+                for (const PendingTrade& trade : pending_) {
+                    const auto maker = lookup(trade.maker_id);
+                    if (!maker) {
+                        throw std::runtime_error(
+                            "TradeStreamToCSV: unknown maker order id " +
+                            std::to_string(trade.maker_id));
+                    }
+                    TradeRow row{};
+                    row.seq = taker->Seq;
+                    row.trade_idx = next_trade_id_++;
+                    row.taker_client_order_id = taker->ClientOrderId;
+                    row.maker_client_order_id = maker->ClientOrderId;
+                    row.taker_side = taker->Side;
+                    row.price = maker->Price;
+                    row.qty = trade.volume;
+                    record(row);
+                }
+                pending_.clear();
+            }
+        }
+    }
+
+private:
+    struct PendingTrade {
+        OrderID_t maker_id;
+        Qty_t volume;
+    };
+
+    uint64_t next_trade_id_ = 1;
+    std::vector<PendingTrade> pending_; // trades of an OP split across batches
+};
+
+// ---------------------------------------------------------------------------
+// TickStreamToCSV
+// ---------------------------------------------------------------------------
+class TickStreamToCSV : public OutputStreamToCSV {
+public:
+    explicit TickStreamToCSV(std::string filename)
+        : OutputStreamToCSV(std::move(filename), TickCSVHeader) {}
+
+    void reset() override {
+        OutputStreamToCSV::reset();
+        trade_count_ = 0;
+        total_volume_ = 0;
+        last_price_ = 0;
+        last_qty_ = 0;
+    }
+
+    using OutputStreamToCSV::record;
+
+    void record(const TickRow& row) {
+        OutputStreamToCSV::record(format_tick_row(row));
+    }
+
+    // Update the cumulative counters from take slots, then emit one tick per
+    // op_end from the event's book snapshot.
+    void record(std::size_t valid_num,
+                const std::vector<CanonicalEvent>& events,
+                const OrderLookup& lookup) {
+        const std::size_t n = std::min(valid_num, events.size());
+
+        for (std::size_t i = 0; i < n; ++i) {
+            const CanonicalEvent& ev = events[i];
+
+            if (ev.kind == UopKind::TakeLine) {
+                const auto& take = std::get<TakeLineResult>(ev.payload);
+                for (std::size_t slot = 0; slot < take.trade_vol_vec.size(); ++slot) {
+                    if (take.trade_vol_vec[slot] == 0) continue;
+                    const auto maker = lookup(take.trade_id_vec[slot]);
+                    if (!maker) {
+                        throw std::runtime_error(
+                            "TickStreamToCSV: unknown maker order id " +
+                            std::to_string(take.trade_id_vec[slot]));
+                    }
+                    ++trade_count_;
+                    total_volume_ += take.trade_vol_vec[slot];
+                    last_price_ = maker->Price;
+                    last_qty_ = take.trade_vol_vec[slot];
+                }
+            }
+
+            if (ev.op_end) {
+                const auto taker = lookup(ev.id);
+                if (!taker) {
+                    throw std::runtime_error(
+                        "TickStreamToCSV: no context for op id " + std::to_string(ev.id));
+                }
+
+                TickRow row{};
+                row.seq = taker->Seq;
+                if (ev.snapshot) {
+                    row.bid_price = ev.snapshot->bid_price.value_or(0);
+                    row.bid_qty   = ev.snapshot->bid_qty;
+                    row.ask_price = ev.snapshot->ask_price.value_or(0);
+                    row.ask_qty   = ev.snapshot->ask_qty;
+                }
+                row.last_price   = last_price_;
+                row.last_qty     = last_qty_;
+                row.trade_count  = trade_count_;
+                row.total_volume = total_volume_;
+                record(row);
+            }
+        }
+    }
+
+private:
+    uint64_t trade_count_ = 0;
+    QtySum_t total_volume_ = 0;
+    Price_t last_price_ = 0;
+    Qty_t last_qty_ = 0;
+};
