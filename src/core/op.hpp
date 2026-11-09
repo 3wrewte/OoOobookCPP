@@ -167,7 +167,12 @@ inline std::pair<size_t, std::vector<Mop> > OPQueue::issue(LevelSumMap & Virtual
                 .id = op.id,
                 .op_seq = op_seq,
                 .op_end = true,
-                .addr = 0,
+                .addr = CanonicalAddrPack(CanonicalAddrStructured{
+                    .sym = op.sym,
+                    .side = op.side,
+                    .price = 0,
+                    .pos = 0
+                }),
                 .imm = 0
             });
         }
