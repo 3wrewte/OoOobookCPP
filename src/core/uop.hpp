@@ -18,17 +18,20 @@ inline TakeLineResult TakeLineCalc(const Line & line, const Qty_t& budget){
     QtySum_t remaining_volume = 0;
     VolLine vol_vec{};
     IDLine  id_vec {};
+    MaskLine complete_vec{};
     for(size_t i = 0; i < 16; i++){
         if(remaining_budget && line.Vols[i]){
             id_vec[i] = line.IDs[i];
             vol_vec[i] = std::min(line.Vols[i], remaining_budget);
             remaining_budget -= vol_vec[i];
+            if(line.Vols[i] == vol_vec[i])complete_vec[i] = true;//trade occur and all opposite volume in the slot is traded
         }
         remaining_volume += line.Vols[i] - vol_vec[i];
     }
     return TakeLineResult{
         .trade_id_vec = id_vec,
         .trade_vol_vec = vol_vec,
+        .trade_complete_vec = complete_vec,
         .consumed = budget - remaining_budget,
         .line_remaining = remaining_volume
     };
@@ -120,7 +123,10 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
                 .id      = uop.id          ,
                 .op_seq  = uop.op_seq      ,
                 .op_end  = uop.op_end      ,
-                .payload = uop.addr        ,
+                .payload = InsertLineResult{
+                    .insert_addr = uop.addr,
+                    .insert_qty  = uop.imm
+                }       ,
                 .snapshot= snapshot
             });
             //commit end
@@ -151,7 +157,7 @@ inline std::vector<CanonicalEvent> UopQueue::exec_n_commit(IdVolMap &idvol)
                 .id      = uop.id          ,
                 .op_seq  = uop.op_seq      ,
                 .op_end  = uop.op_end      ,
-                .payload = std::monostate{},
+                .payload = OPIssue(uop.imm),
                 .snapshot= snapshot
             });
         }

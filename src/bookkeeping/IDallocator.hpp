@@ -30,7 +30,7 @@ inline OP IDallocator::allocate(OPcontext &opc){
     // One unique op id per input row so the output stage can always recover the
     // taker context, including Cancel / no-op rows.
     const OrderID_t op_id = count++;
-    opc.id = op_id;
+    //opc.id = op_id;
 
     uint32_t imm0 = 0, imm1 = 0;
     OPKind kind = opc.kind;
@@ -51,11 +51,16 @@ inline OP IDallocator::allocate(OPcontext &opc){
         const auto it = map_in.find({opc.AccountId, opc.ClientOrderId});
         if (it == map_in.end()) {
             kind = OPKind::NOOP;
+            imm0 = uint32_t(OPIssue::UnknownCancelTarget);
         } else {
             imm0 = it->second;
         }
+    } else if (opc.kind == OPKind::NOOP) { // already rejected by checker
+        kind = OPKind::NOOP;
+        imm0 = uint32_t(opc.reject_reason);
     } else {
         kind = OPKind::NOOP;
+        imm0 = uint32_t (OPIssue::UnknownError);
     }
 
     map_out[op_id] = opc; // context for the output stage (Cancel / NOOP included)

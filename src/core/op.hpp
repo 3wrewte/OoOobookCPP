@@ -134,7 +134,7 @@ inline std::pair<size_t, std::vector<Mop> > OPQueue::issue(LevelSumMap & Virtual
                             .price = 0,
                             .pos = 0
                         }),
-                        .imm = 0
+                        .imm = 0 // Default, no issue
                     });
             } else {
                 results.back().op_end = true;
@@ -166,7 +166,7 @@ inline std::pair<size_t, std::vector<Mop> > OPQueue::issue(LevelSumMap & Virtual
                         .price = 0,
                         .pos = 0
                     }),
-                    .imm = 0
+                    .imm = uint32_t(OPIssue::UnknownCancelTarget)
                 });
             }
         }
@@ -182,7 +182,7 @@ inline std::pair<size_t, std::vector<Mop> > OPQueue::issue(LevelSumMap & Virtual
                     .price = 0,
                     .pos = 0
                 }),
-                .imm = 0
+                .imm = op.imm0
             });
         }
     }
@@ -203,7 +203,7 @@ inline std::vector</*std::pair<OP,OPcontext>*/OP > OPQueue::release (std::vector
             commit_front = (commit_front + 1) & ((1 << OP_ROB_BITS) - 1);
         }
         if(i.kind == UopKind::InsertSlot){
-            resting_index[i.id] = std::get<CanonicalAddr_t>(i.payload); // input only now
+            resting_index[i.id] = std::get<InsertLineResult>(i.payload).insert_addr; // input only now
         }
     }
     head.set(commit_front);

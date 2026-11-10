@@ -127,6 +127,7 @@ inline CanonicalAddr_t Level_to_CanonicalAddr(LevelAddr_t addr){
 
 using IDLine   = std::array<OrderID_t, 16>;
 using VolLine  = std::array<Qty_t    , 16>;
+using MaskLine = std::array<bool     , 16>;
 struct Line{
     IDLine  IDs ;
     VolLine Vols;

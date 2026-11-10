@@ -1,4 +1,4 @@
-CXX      := g++-16
+CXX      := g++
 CXXFLAGS := -std=c++2c -Wall -Wextra -I. -Ilibs -Itest -Isrc
 
 TEST_MAIN := test/test_main.cpp
