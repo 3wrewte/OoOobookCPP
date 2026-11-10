@@ -37,9 +37,11 @@ inline OP IDallocator::allocate(OPcontext &opc){
 
     if (opc.ContractId >= 128) {
         kind = OPKind::NOOP;
+        imm0 = uint32_t(OPIssue::InvalidContract);
     } else if (opc.kind == OPKind::Limit) {
         if (opc.Price > Price_max) {
             kind = OPKind::NOOP;
+            imm0 = uint32_t(OPIssue::InvalidPrice);
         } else {
             imm0 = opc.Price;
             imm1 = opc.qty;

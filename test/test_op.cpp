@@ -204,6 +204,19 @@ TEST_CASE("market sell on an empty book emits only an end marker") {
     CHECK(mops[0].op_end);
 }
 
+TEST_CASE("NOOP carries its OPIssue in the end marker") {
+    OPHarness h;
+    h.alloc({OP{15, OPKind::NOOP, 0, Side_t::Buy,
+                uint32_t(OPIssue::InvalidPrice), 0}});
+    const std::vector<Mop> mops = h.issue();
+
+    REQUIRE(mops.size() == 1);
+    CHECK(mops[0].kind == MopKind::End);
+    CHECK(mops[0].id == 15);
+    CHECK(mops[0].op_end);
+    CHECK(mops[0].imm == uint32_t(OPIssue::InvalidPrice));
+}
+
 // ---------------------------------------------------------------------------
 // Cancel
 // ---------------------------------------------------------------------------
@@ -231,6 +244,7 @@ TEST_CASE("cancel of an unknown target is a no-op end marker") {
     REQUIRE(mops.size() == 1);
     CHECK(mops[0].kind == MopKind::End);
     CHECK(mops[0].op_end);
+    CHECK(mops[0].imm == uint32_t(OPIssue::UnknownCancelTarget));
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +277,7 @@ TEST_CASE("release retires the head OP and backfills the resting index") {
         .id = 7,
         .op_seq = 0,
         .op_end = true,
-        .payload = addr,
+        .payload = InsertLineResult{.insert_addr = addr, .insert_qty = 5},
         .snapshot = std::nullopt,
     });
     std::vector<OP> released;

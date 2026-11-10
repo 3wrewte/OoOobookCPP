@@ -84,14 +84,14 @@ Uop cancel_uop(OpSeq op_seq, CanonicalAddr_t addr, OrderID_t target,
     };
 }
 
-Uop end_uop(OpSeq op_seq, bool op_end = true) {
+Uop end_uop(OpSeq op_seq, bool op_end = true, OPIssue issue = OPIssue::Default) {
     return Uop{
         .kind   = UopKind::End,
         .id     = 0,
         .op_seq = op_seq,
         .op_end = op_end,
         .addr   = 0,
-        .imm    = 0,
+        .imm    = uint32_t(issue),
     };
 }
 
@@ -207,8 +207,10 @@ TEST_CASE("insert becomes visible and updates the BBO snapshot") {
     CHECK(ev[0].id == 42);
     CHECK(ev[0].op_seq == 0);
     CHECK(ev[0].op_end);
-    CHECK(std::holds_alternative<CanonicalAddr_t>(ev[0].payload));
-    CHECK(std::get<CanonicalAddr_t>(ev[0].payload) == A(0, p, Side_t::Buy));
+    REQUIRE(std::holds_alternative<InsertLineResult>(ev[0].payload));
+    const auto& ins = std::get<InsertLineResult>(ev[0].payload);
+    CHECK(ins.insert_addr == A(0, p, Side_t::Buy));
+    CHECK(ins.insert_qty == 5);
 
     CHECK(h.idvol.slot_volume(A(0, p, Side_t::Buy)) == 5);
     CHECK(h.idvol.line_sum_ram(A(0, p, Side_t::Buy)) == 5);
@@ -450,7 +452,8 @@ TEST_CASE("End completes an OP without touching the book") {
     CHECK(ev[1].kind == UopKind::End);
     CHECK(ev[1].op_seq == 0);
     CHECK(ev[1].op_end);
-    CHECK(std::holds_alternative<std::monostate>(ev[1].payload));
+    REQUIRE(std::holds_alternative<OPIssue>(ev[1].payload));
+    CHECK(std::get<OPIssue>(ev[1].payload) == OPIssue::Default);
 
     CHECK(h.idvol.slot_volume(A(0, p, Side_t::Buy)) == 4);
     CHECK(h.idvol.level_sum_ram(A(0, p, Side_t::Buy)) == 4);
@@ -458,6 +461,27 @@ TEST_CASE("End completes an OP without touching the book") {
     REQUIRE(ev[1].snapshot->bid_price.has_value());
     CHECK(*ev[1].snapshot->bid_price == p);
     CHECK(ev[1].snapshot->bid_qty == 4);
+}
+
+TEST_CASE("End carries a reject issue to the canonical event") {
+    Harness h;
+
+    const std::vector<CanonicalEvent> ev = h.run({
+        end_uop(0, true, OPIssue::InvalidPrice),
+    });
+
+    REQUIRE(ev.size() == 1);
+    CHECK(ev[0].kind == UopKind::End);
+    CHECK(ev[0].op_seq == 0);
+    CHECK(ev[0].op_end);
+    REQUIRE(std::holds_alternative<OPIssue>(ev[0].payload));
+    CHECK(std::get<OPIssue>(ev[0].payload) == OPIssue::InvalidPrice);
+
+    // A reject does not touch the book and still produces a tick snapshot.
+    CHECK(h.idvol.ram.empty());
+    REQUIRE(ev[0].snapshot.has_value());
+    CHECK_FALSE(ev[0].snapshot->bid_price.has_value());
+    CHECK_FALSE(ev[0].snapshot->ask_price.has_value());
 }
 
 TEST_CASE("events keep uop order and op_end markers") {

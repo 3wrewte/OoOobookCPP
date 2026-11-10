@@ -1,3 +1,5 @@
+#include <string>
+
 #include "core/top.hpp"
 #include "bookkeeping/IDallocator.hpp"
 #include "io/csvloader.hpp"
@@ -6,12 +8,12 @@
 struct top{
     core_top core;
     IDallocator id_allocator;
-    InstructionsFromCSV instructions;//("build/orders.csv");
-    TradeStreamToCSV    trades      ;//("build/trades.csv");
-    TickStreamToCSV     ticks       ;//("build/ticks.csv");
+    InstructionsFromCSV instructions;
+    TradeStreamToCSV    trades      ;
+    TickStreamToCSV     ticks       ;
 
 
-    top();
+    top(std::string orders_path, std::string trades_path, std::string ticks_path);
 
     void reset  ();
     void prepare();
@@ -24,7 +26,14 @@ struct top{
 
 
 int main(int argc, char** argv){
-    top top_u;
+    std::string orders = "build/orders.csv";
+    std::string trades = "build/trades.csv";
+    std::string ticks  = "build/ticks.csv";
+    if (argc >= 2) orders = argv[1];
+    if (argc >= 3) trades = argv[2];
+    if (argc >= 4) ticks  = argv[3];
+
+    top top_u(orders, trades, ticks);
     top_u.reset();
     while(true){
         global_phase = Phase::Prepare;
@@ -39,10 +48,10 @@ int main(int argc, char** argv){
     return 0;
 }
 
-top::top()
-    : instructions("build/orders.csv"),
-      trades      ("build/trades.csv"),
-      ticks       ("build/ticks.csv") {
+top::top(std::string orders_path, std::string trades_path, std::string ticks_path)
+    : instructions(std::move(orders_path)),
+      trades      (std::move(trades_path)),
+      ticks       (std::move(ticks_path)) {
 }
 
 void top::reset  (){
