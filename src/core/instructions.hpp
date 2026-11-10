@@ -11,14 +11,16 @@ enum class OPIssue : uint32_t {
     Default            = 0x0000, // 正常NOOP
     InvalidPrice       = 0x8000, // price 越界/非法
     InvalidQty         = 0x8001, // qty==0
-    QtyTooLarge        = 0x8002, // 超过上限
+    //QtyTooLarge        = 0x8002, // 超过上限 合并进入InvalidQty
     InvalidContract    = 0x8003, // sym/contract 非法
     UnknownCancelTarget= 0x8004, // 撤单目标不存在（也可继续用 CancelResult.found=false）
     InsufficientFunds  = 0x8005, // checker: 现金/保证金不足
     PositionLimit      = 0x8006, // checker: 会超持仓上限
-    PostOnlyWouldCross = 0x8007, // post-only 会吃单
-    SelfTradePrevented = 0x8008, // 会和自己成交
+    //PostOnlyWouldCross = 0x8007, // post-only 会吃单
+    //SelfTradePrevented = 0x8008, // 会和自己成交
     RiskLimit          = 0x8009, // 其他风险
+    InvalidAccount     = 0x800a,
+    InsufficientBase   = 0x800b,
     UnknownError       = 0xffff
 };
 
@@ -27,7 +29,7 @@ struct OP {
     OPKind          kind      ;
     Sym_t           sym       ;
     Side_t          side      ;
-    uint32_t        imm0      ; // Limit: price, market: empty, Cancel: target_id, NOOP: OPIssue
+    uint32_t        imm0      ; // Limit: price, market: cap_price, Cancel: target_id, NOOP: OPIssue
     uint32_t        imm1      ; // Limit/market: qty, Cancel: empty, NOOP: detail 32 bit
 };
 

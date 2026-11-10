@@ -59,8 +59,9 @@ inline std::pair<size_t, std::vector<Mop> > OPQueue::issue(LevelSumMap & Virtual
         if(op.kind == OPKind::Limit || op.kind == OPKind::Market){
             const Price_t best = (op.side == Side_t::Buy)? idvol.meta.best_ask().value_or(Price_max)
                 : idvol.meta.best_bid().value_or(0);
-            const Price_t limit = (op.kind == OPKind::Limit)? op.imm0
-                : (op.side == Side_t::Buy)? Price_max : 0;
+            const Price_t limit = op.imm0;
+            //(op.kind == OPKind::Limit)? op.imm0
+            //    : (op.side == Side_t::Buy)? Price_max : 0;
             const size_t active = idvol.meta.sides[!op.side].active_levels;
 
             const Qty_t &total_budget = op.imm1;

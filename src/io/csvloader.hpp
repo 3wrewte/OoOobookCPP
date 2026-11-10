@@ -276,7 +276,7 @@ inline void InstructionsFromCSV::reset(){
             ctx.qty = static_cast<Qty_t>(qty);
 
             if (market) {
-                ctx.Price = 0;
+                ctx.Price = (ctx.Side  == Side_t::Buy)? Price_max : Price_min;
             } else {
                 const std::uint64_t price = csvio::parse_u64(field(price_col), "price", line_no);
                 if (price > static_cast<std::uint64_t>(Price_max)) {

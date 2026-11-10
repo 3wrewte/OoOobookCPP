@@ -47,7 +47,7 @@ inline OP IDallocator::allocate(OPcontext &opc){
             imm1 = opc.qty;
         }
     } else if (opc.kind == OPKind::Market) {
-        imm0 = 0;
+        imm0 = opc.Price;
         imm1 = opc.qty;
     } else if (opc.kind == OPKind::Cancel) {
         const auto it = map_in.find({opc.AccountId, opc.ClientOrderId});
