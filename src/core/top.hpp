@@ -12,6 +12,7 @@
 #include "core/sumcache.hpp"
 #include "core/uop.hpp"
 #include "core/wire.hpp"
+#include "core/events.hpp"
 
 struct core_top{
     IdVolMap idvol;
@@ -27,26 +28,26 @@ struct core_top{
         comb(size_t valid_num, std::vector<OP>& OPs); // input: valid_num, OPs
 };
 
-void core_top::reset  (){
+inline void core_top::reset  (){
     idvol    .reset();
      op_queue.reset();
     mop_queue.reset();
     uop_queue.reset();
 }
-void core_top::prepare(){
+inline void core_top::prepare(){
     //idvol; write-immediate, hence no prepare yet
      op_queue.prepare();
     mop_queue.prepare();
     uop_queue.prepare();
 }
-void core_top::commit (){
+inline void core_top::commit (){
     //idvol; write-immediate, hence no commit yet
      op_queue.commit();
     mop_queue.commit();
     uop_queue.commit();
 }
 
-std::pair<size_t, std::vector<CanonicalEvent> >
+inline std::pair<size_t, std::vector<CanonicalEvent> >
 core_top::comb(size_t op_valid_num, std::vector<OP>& OPs){
     op_queue.alloc(op_valid_num, OPs);
     auto MOP_wave = op_queue.issue(idvol.level_sum, idvol);
@@ -54,6 +55,8 @@ core_top::comb(size_t op_valid_num, std::vector<OP>& OPs){
     auto UOP_wave = mop_queue.issue(idvol.line_sum, idvol);
     uop_queue.alloc(UOP_wave.first, UOP_wave.second);
     std::vector<CanonicalEvent> events = uop_queue.exec_n_commit(idvol);
-    op_queue.release(events);
+    auto end_events = EndEvents(events);
+    auto new_retire_events = NewRetireEvents(events);
+    op_queue.release(end_events, new_retire_events);
     return std::make_pair(events.size(), events);
 }

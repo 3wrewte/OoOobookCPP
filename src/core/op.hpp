@@ -9,6 +9,7 @@
 #include "mop.hpp"
 #include "registers.hpp"
 #include "instructions.hpp"
+#include "core/events.hpp"
 
 constexpr size_t   OP_ROB_LENGTH = 16;
 constexpr uint64_t OP_ROB_MASK   = OP_ROB_LENGTH - 1;
@@ -35,7 +36,7 @@ struct OPQueue{ // a  single-tick substitution of op ROB
 
     std::pair<size_t, std::vector<Mop> >  issue(LevelSumMap & VirtualLevelSum, IdVolMap & idvol); // will change to Line SumCache
 
-    std::vector</*std::pair<OP,OPcontext>*/OP> release (std::vector<CanonicalEvent> &events);//listen to Canonical Event
+    std::vector</*std::pair<OP,OPcontext>*/OP> release (std::vector<OpSeq> &end_events, std::vector<NewRetireEvent> &new_retire_events);//listen to Canonical Event
 };
 
 inline void OPQueue::alloc(size_t valid_num, std::vector<OP>& ops/*, std::vector<OPcontext> &opcs*/)
@@ -191,23 +192,29 @@ inline std::pair<size_t, std::vector<Mop> > OPQueue::issue(LevelSumMap & Virtual
     return std::make_pair(results.size(), results);
 }
 
-inline std::vector</*std::pair<OP,OPcontext>*/OP > OPQueue::release (std::vector<CanonicalEvent> &events){
+inline std::vector</*std::pair<OP,OPcontext>*/OP > OPQueue::release (std::vector<OpSeq> &end_events, std::vector<NewRetireEvent> &new_retire_events){
+
+
     //std::vector<std::pair<OP,OPcontext> > res;
     std::vector<OP> res;
     size_t commit_front = head.get();
-    for(auto &i : events){
-        if(i.op_end){
-            assert(i.id == op_queue[commit_front].id);
-            assert(i.op_seq == commit_front);
-            res.push_back(op_queue[commit_front]);
-            //res.push_back(std::make_pair(op_queue[commit_front], opcontext_queue[commit_front]));
-            commit_front = (commit_front + 1) & ((1 << OP_ROB_BITS) - 1);
-        }
-        if(i.kind == UopKind::InsertSlot){
-            resting_index[i.id] = std::get<InsertLineResult>(i.payload).insert_addr; // input only now
-        }
+    for(auto &i : end_events){
+        assert(i == commit_front);
+        res.push_back(op_queue[commit_front]);
+        //res.push_back(std::make_pair(op_queue[commit_front], opcontext_queue[commit_front]));
+        commit_front = (commit_front + 1) & ((1 << OP_ROB_BITS) - 1);
     }
     head.set(commit_front);
+
+    for(auto &i : new_retire_events){
+        if(i.type == NewRetireEvent::Types::New){
+            assert (i.addr.has_value());
+            resting_index[i.id] = i.addr.value(); // input only now
+        }
+        else if(i.type == NewRetireEvent::Types::Retire){
+            resting_index.erase(i.id);
+        }
+    }
     return res;
 }
 

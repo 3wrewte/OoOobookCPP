@@ -4,6 +4,7 @@
 #include "core/instructions.hpp"
 #include "core/addr.hpp"
 #include "core/types.hpp"
+#include "core/events.hpp"
 
 
 
@@ -17,6 +18,8 @@ struct IDallocator{
 
     OP allocate(OPcontext &opc);
     std::optional<OPcontext> get(OrderID_t id);
+
+    void release(std::vector<NewRetireEvent> &new_retire_events);
 };
 inline void IDallocator::reset(){
     map_in = {};
@@ -82,4 +85,18 @@ inline OP IDallocator::allocate(OPcontext &opc){
 inline std::optional<OPcontext> IDallocator::get(OrderID_t id){
     if (map_out.find(id) == map_out.end()) return std::nullopt;
     return map_out[id];
+}
+
+inline void IDallocator::release(std::vector<NewRetireEvent> &new_retire_events){
+    for(auto &i : new_retire_events){
+        // if(i.type == NewRetireEvent::Types::New){} //does not need New event
+        if(i.type == NewRetireEvent::Types::Retire){
+            const auto it = map_out.find(i.id);
+            assert(it != map_out.end()); // map out should always have the order, even for noop and cancel
+            const std::pair<uint64_t,uint64_t> key = {it->second.AccountId, it->second.ClientOrderId} ;
+            //assert(map_in.find(key) != map_in.end());
+            map_in.erase(key); // map_in does not always have the order, only for market and limit
+            map_out.erase(it);
+        }
+    }
 }
