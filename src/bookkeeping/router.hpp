@@ -105,33 +105,7 @@ struct router{
                 });
                 }
             }
-        }
         return {trade_events, tick_events, reply_events};
-    }
-
-    std::vector<InputReplyEvent> InputReplyEvents(const std::vector<CanonicalEvent> &events, const IDallocator &idallocator){
-        std::vector<InputReplyEvent> reply_events;
-        for(auto &i : events){
-            if(i.op_end){
-                const auto order_it = idallocator.map_out.find(i.id);
-                assert (order_it != idallocator.map_out.end()); // since the order is not retired yet, it must exists in map_out
-                const OPcontext &order = order_it->second;
-                reply_events.push_back(InputReplyEvent {
-                    .seq            = order.Seq,
-                    .contract_id    = order.ContractId,
-                    .account_id     = order.AccountId,
-                    .client_order_id= order.ClientOrderId,
-                    .reject_reason  = (i.kind == UopKind::End)? std::get<OPIssue>(i.payload) : OPIssue::Default,
-                    .reject_detail  = 0, // not done yet
-                    //.filled_qty     = ,
-                    //.rested_qty     = ,
-                    //.discarded_qty  = ,   // discarded 用于 market 剩余
-                    .cancel_found   = (i.kind == UopKind::Cancel)? std::get<CancelResult>(i.payload).found : false,
-                    .cancel_qty     = (i.kind == UopKind::Cancel)? std::get<CancelResult>(i.payload).volume_removed : 0,
-                });
-            }
-        }
-        return reply_events;
     }
 
 };

@@ -72,7 +72,9 @@ struct OPHarness {
         global_phase = Phase::Comb;
         q.alloc(0, no_ops);
         auto out = q.issue(idvol.level_sum, idvol);
-        released = q.release(events);
+        std::vector<OpSeq> end_events = EndEvents(events);
+        std::vector<NewRetireEvent> retire_events = NewRetireEvents(events);
+        released = q.release(end_events, retire_events);
         global_phase = Phase::Commit;
         q.commit();
         return out.second;
@@ -174,7 +176,7 @@ TEST_CASE("market buy discards its remainder without resting") {
     OPHarness h;
     h.idvol.insert_slot(A(0, 101, Side_t::Sell), 1, 2);
 
-    h.alloc({OP{12, OPKind::Market, 0, Side_t::Buy, 0, 5}});
+    h.alloc({OP{12, OPKind::Market, 0, Side_t::Buy, Price_max, 5}});
     const std::vector<Mop> mops = h.issue();
 
     REQUIRE(mops.size() == 1);
@@ -186,7 +188,7 @@ TEST_CASE("market buy discards its remainder without resting") {
 
 TEST_CASE("market buy on an empty book emits only an end marker") {
     OPHarness h;
-    h.alloc({OP{13, OPKind::Market, 0, Side_t::Buy, 0, 5}});
+    h.alloc({OP{13, OPKind::Market, 0, Side_t::Buy, Price_max, 5}});
     const std::vector<Mop> mops = h.issue();
 
     REQUIRE(mops.size() == 1);

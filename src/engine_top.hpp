@@ -73,7 +73,8 @@ engine_top::comb(size_t op_valid_num, std::vector<OPcontext>& OPcs){
     std::vector<CanonicalEvent> events = uop_queue.exec_n_commit(idvol);
     auto end_events = EndEvents(events);
     auto new_retire_events = NewRetireEvents(events);
-    auto [trade_events, tick_events, reply_events] = router_u.RouteEvents(events, id_allocator);
+    auto [trade_events, tick_events, reply_events] =
+        router_u.RouteEvents(events, id_allocator);
     op_queue.release(end_events, new_retire_events);
     id_allocator.release(new_retire_events);
     return {trade_events, tick_events, reply_events}; // EndEvents and NewRetireEvents is internal

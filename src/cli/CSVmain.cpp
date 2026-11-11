@@ -1,13 +1,11 @@
 #include <string>
 
-#include "core/top.hpp"
-#include "bookkeeping/IDallocator.hpp"
+#include "engine_top.hpp"
 #include "io/csvloader.hpp"
 #include "io/csvrecorder.hpp"
 
 struct top{
-    core_top core;
-    IDallocator id_allocator;
+    engine_top engine;
     InstructionsFromCSV instructions;
     TradeStreamToCSV    trades      ;
     TickStreamToCSV     ticks       ;
@@ -55,22 +53,19 @@ top::top(std::string orders_path, std::string trades_path, std::string ticks_pat
 }
 
 void top::reset  (){
-    core        .reset();
-    id_allocator.reset();
+    engine      .reset();
     instructions.reset();
     trades      .reset();
     ticks       .reset();
 }
 void top::prepare(){
-    core        .prepare();
-    id_allocator.prepare();
+    engine      .prepare();
     instructions.prepare();
     trades      .prepare();
     ticks       .prepare();
 }
 void top::commit (){
-    core        .commit();
-    id_allocator.commit();
+    engine      .commit();
     instructions.commit();
     trades      .commit();
     ticks       .commit();
@@ -81,17 +76,14 @@ void top::finish(){
     ticks.finish();
 }
 void top::comb(){
-    const std::vector<OPcontext> opcs = instructions.issue(core.op_queue.ready_num());
-    std::vector<OP> ops;
-    for(auto i : opcs){
-        ops.push_back(id_allocator.allocate(i));
-    }
-    auto [event_num, events] = core.comb(ops.size(), ops);
-    auto lookup = [&](OrderID_t id){ return id_allocator.get(id); };
-    trades.record(event_num, events, lookup);
-    ticks.record(event_num, events, lookup);
+    std::vector<OPcontext> opcs = instructions.issue(engine.op_queue.ready_num());
+    auto [trade_events, tick_events, reply_events] =
+        engine.comb(opcs.size(), opcs);
+    (void)reply_events;
+    trades.record(trade_events);
+    ticks.record(tick_events);
 }
 
 bool top::end_flag(){
-    return (instructions.get_valid_num() == 0) && (core.op_queue.ready_num() == OP_ROB_LENGTH - 1);
+    return (instructions.get_valid_num() == 0) && (engine.op_queue.ready_num() == OP_ROB_LENGTH - 1);
 }

@@ -93,7 +93,7 @@ TEST_CASE("csv loader accepts market orders without a price") {
     csv.reset();
     REQUIRE(csv.instructions.size() == 1);
     CHECK(csv.instructions[0].kind == OPKind::Market);
-    CHECK(csv.instructions[0].Price == 0);
+    CHECK(csv.instructions[0].Price == Price_max);
     CHECK(csv.instructions[0].qty == 5);
 }
 

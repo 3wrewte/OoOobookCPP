@@ -1,4 +1,7 @@
 #pragma once
+#include <optional>
+#include <vector>
+
 #include "core/types.hpp"
 #include "core/instructions.hpp"
 struct NewRetireEvent{
@@ -46,7 +49,7 @@ struct InputReplyEvent {
     Qty_t    cancel_qty     ;
 };
 
-std::vector<OpSeq> EndEvents(const std::vector<CanonicalEvent> & events) // FOR op queue
+inline std::vector<OpSeq> EndEvents(const std::vector<CanonicalEvent> & events) // FOR op queue
 {
     std::vector<OpSeq> res;
     for(auto &i : events){
@@ -57,7 +60,7 @@ std::vector<OpSeq> EndEvents(const std::vector<CanonicalEvent> & events) // FOR 
     return res;
 }
 
-std::vector<NewRetireEvent> NewRetireEvents(const std::vector<CanonicalEvent> & events) // for resting index and ID map in/out
+inline std::vector<NewRetireEvent> NewRetireEvents(const std::vector<CanonicalEvent> & events) // for resting index and ID map in/out
 {
     std::vector<NewRetireEvent> res;
     for(auto &i : events){
