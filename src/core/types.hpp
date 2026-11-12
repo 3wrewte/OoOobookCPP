@@ -34,5 +34,10 @@ constexpr size_t Side_bits = 1;
 enum Side_t : bool {Buy = 0, Sell = 1};
 
 
+using Seq_t = uint64_t;
+using ContractId_t = uint32_t;
+using AccountId_t = uint64_t;
+using ClientOrderId_t = uint64_t;
 
 #endif
+

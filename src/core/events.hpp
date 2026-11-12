@@ -16,6 +16,8 @@ struct TradeEvent {
     uint64_t trade_idx              ; // 1-based, global across the run
     uint64_t taker_client_order_id  ; // crosscheck "taker_order_id" column
     uint64_t maker_client_order_id  ; // crosscheck "maker_order_id" column
+    uint64_t taker_account_id       ;
+    uint64_t maker_account_id       ;
     Side_t   taker_side             ;
     Price_t  price                  ; // maker (resting) price
     Qty_t    qty                    ;
@@ -39,6 +41,7 @@ struct InputReplyEvent {
     uint32_t contract_id    ;
     uint64_t account_id     ;
     uint64_t client_order_id;
+    OPKind   kind;
     //status: Rested / PartiallyFilled / Filled / Cancelled / Rejected / Noop,
     OPIssue  reject_reason  ;
     uint32_t reject_detail  ;

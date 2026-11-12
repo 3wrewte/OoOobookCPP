@@ -57,6 +57,8 @@ struct router{
                         .trade_idx             = ++trade_count_               ,
                         .taker_client_order_id = taker.ClientOrderId          ,
                         .maker_client_order_id = maker.ClientOrderId          ,
+                        .taker_account_id      = taker.AccountId              ,
+                        .maker_account_id      = maker.AccountId              ,
                         .taker_side            = taker.Side                   ,
                         .price                 = maker.Price                  ,
                         .qty                   = result.trade_vol_vec[j]      ,
@@ -95,6 +97,7 @@ struct router{
                     .contract_id    = order.ContractId,
                     .account_id     = order.AccountId,
                     .client_order_id= order.ClientOrderId,
+                    .kind           = order.kind,
                     .reject_reason  = (i.kind == UopKind::End)? std::get<OPIssue>(i.payload) : OPIssue::Default,
                     .reject_detail  = 0, // not done yet
                     .filled_qty     = final_fill,

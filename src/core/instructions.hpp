@@ -21,6 +21,7 @@ enum class OPIssue : uint32_t {
     RiskLimit          = 0x8009, // 其他风险
     InvalidAccount     = 0x800a,
     InsufficientBase   = 0x800b,
+    RepeatedID         = 0x800c,
     UnknownError       = 0xffff
 };
 
@@ -35,10 +36,10 @@ struct OP {
 
 struct OPcontext{
     OPKind          kind      ;
-    uint64_t Seq;
-    uint32_t ContractId;
-    uint64_t AccountId;
-    uint64_t ClientOrderId;
+    Seq_t Seq;
+    ContractId_t ContractId;
+    AccountId_t AccountId;
+    ClientOrderId_t ClientOrderId;
     //OrderID_t id;
     Side_t   Side;
     Price_t  Price;
