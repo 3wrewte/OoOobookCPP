@@ -55,6 +55,7 @@ inline void Checker::reset()
 }
 inline void Checker::reset(std::unordered_map<uint64_t, AccountState>& init_states, double rate)
 {
+    (void)rate;
     states = std::move(init_states);
     //market_reserve_rate = rate;
 }
@@ -77,6 +78,18 @@ inline OPcontext Checker::check(const OPcontext &opc)
                 .reject_detail= 0
             };
         }
+    if(opc.ContractId >= 128)return OPcontext{
+            .kind         = OPKind::NOOP,
+            .Seq          = opc.Seq,
+            .ContractId   = opc.ContractId,
+            .AccountId    = opc.AccountId,
+            .ClientOrderId= opc.ClientOrderId,
+            .Side         = opc.Side,
+            .Price        = opc.Price,
+            .qty          = opc.qty,
+            .reject_reason= OPIssue::InvalidContract,
+            .reject_detail= 0
+        };
     if(opc.kind == OPKind :: Limit || opc.kind == OPKind :: Market){
         if(opc.Price > Price_max)return OPcontext{
             .kind         = OPKind::NOOP,

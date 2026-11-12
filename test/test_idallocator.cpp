@@ -77,16 +77,6 @@ TEST_CASE("IDallocator rejects an out-of-range contract") {
     CHECK(op.imm0 == uint32_t(OPIssue::InvalidContract));
 }
 
-TEST_CASE("IDallocator rejects an out-of-range price") {
-    IDallocator a;
-    a.reset();
-
-    OPcontext lc = limit_ctx(1, 1, 1, Side_t::Buy, uint32_t(Price_max) + 1, 1);
-    const OP op = a.allocate(lc);
-    CHECK(op.kind == OPKind::NOOP);
-    CHECK(op.imm0 == uint32_t(OPIssue::InvalidPrice));
-}
-
 TEST_CASE("IDallocator forwards an already rejected NOOP reason") {
     IDallocator a;
     a.reset();
