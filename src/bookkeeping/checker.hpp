@@ -318,7 +318,7 @@ inline bool transfer_cash(const AccountId_t from_id, const AccountId_t to_id, co
     return true;
 }
 inline bool transfer_position(const AccountId_t from_id, const AccountId_t to_id, const uint64_t position, Checker & from, Checker & to){
-    if (from_id == to_id) return false;
+    if (&from == &to && from_id == to_id) return false;
     if(from.states.find(from_id) == from.states.end())return false;
     if(  to.states.find(  to_id) ==   to.states.end())return false;
     auto &from_position = from.states[from_id].base;
