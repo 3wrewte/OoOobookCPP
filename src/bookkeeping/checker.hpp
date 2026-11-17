@@ -52,12 +52,14 @@ inline void Checker::reset()
 {
     states = {};
     //market_reserve_rate = 0.05;
+    open.clear();
 }
 inline void Checker::reset(std::unordered_map<uint64_t, AccountState>& init_states, double rate)
 {
     (void)rate;
     states = std::move(init_states);
     //market_reserve_rate = rate;
+    open.clear();
 }
 inline void Checker::prepare(){}
 inline void Checker::commit(){}
@@ -297,4 +299,37 @@ inline void Checker::update(const std::vector<TradeEvent> &trade_events, const s
             }
         }
     }
+}
+
+
+inline bool transfer_cash(const AccountId_t from_id, const AccountId_t to_id, const uint64_t cash, Checker & from, Checker & to){
+    if (from_id == to_id) return false;
+    if(from.states.find(from_id) == from.states.end())return false;
+    if(  to.states.find(  to_id) ==   to.states.end())return false;
+    auto &from_cash = from.states[from_id].cash;
+    auto &  to_cash =   to.states[  to_id].cash;
+    if(from_cash.has_value() &&
+          std::saturating_sub(from_cash.value() , from.states[from_id].cash_locked) < cash)
+        return false;
+    if (to_cash.has_value() && cash > UINT64_MAX - to_cash.value()) return false; // uint64 overflow
+
+    if(from_cash.has_value())from_cash = from_cash.value() - cash;// alreasy tested that must not overflow
+    if(to_cash.has_value())    to_cash = to_cash.value() + cash;
+    return true;
+}
+inline bool transfer_position(const AccountId_t from_id, const AccountId_t to_id, const uint64_t position, Checker & from, Checker & to){
+    if (from_id == to_id) return false;
+    if(from.states.find(from_id) == from.states.end())return false;
+    if(  to.states.find(  to_id) ==   to.states.end())return false;
+    auto &from_position = from.states[from_id].base;
+    auto &  to_position =   to.states[  to_id].base;
+    if(from_position.has_value() &&
+        std::saturating_sub(from_position.value() , from.states[from_id].base_locked) < position)
+        return false;
+    if(to_position.has_value()
+        && position > std::saturating_sub(to.states[to_id].position_limit.value_or(UINT64_MAX), to_position.value())) // limit overflow or uint64 overflow
+        return false;
+    if(from_position.has_value())from_position = from_position.value() - position; // alreasy tested that must not overflow
+    if(to_position.has_value())    to_position = to_position.value() + position;
+    return true;
 }
