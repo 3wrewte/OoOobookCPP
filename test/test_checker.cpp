@@ -391,3 +391,264 @@ TEST_CASE("partial maker fill keeps its reservation until fully cleared") {
     CHECK(c.states.at(2).base.value() == 5);
     CHECK(c.states.at(2).base_locked == 0);
 }
+
+// ---------------------------------------------------------------------------
+// transfer_cash / transfer_position
+//
+// Both are single-threaded, validate-before-mutate operations on two checkers.
+// The failure tests assert that a rejected transfer leaves *both* sides exactly
+// as they were (no partial debit of the source).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+Checker make_checker(std::initializer_list<std::pair<AccountId_t, AccountState>> entries) {
+    Checker c;
+    auto init = book(entries);
+    c.reset(init, 0.0);
+    return c;
+}
+
+AccountState locked(uint64_t cash, uint64_t base,
+                    uint64_t cash_locked = 0, uint64_t base_locked = 0,
+                    std::optional<uint64_t> position_limit = std::nullopt) {
+    AccountState s = account(cash, base, position_limit);
+    s.cash_locked = cash_locked;
+    s.base_locked = base_locked;
+    return s;
+}
+
+} // namespace
+
+TEST_CASE("transfer_cash moves available cash between two checkers") {
+    auto from = make_checker({{1, account(1000, 0)}});
+    auto to   = make_checker({{2, account(0, 0)}});
+
+    CHECK(transfer_cash(1, 2, 300, from, to));
+    CHECK(from.states.at(1).cash.value() == 700);
+    CHECK(to.states.at(2).cash.value() == 300);
+    CHECK(from.states.at(1).cash_locked == 0);
+    CHECK(to.states.at(2).cash_locked == 0);
+}
+
+TEST_CASE("transfer_cash rejects unknown or self accounts without changes") {
+    auto from = make_checker({{1, account(1000, 0)}});
+    auto to   = make_checker({{2, account(0, 0)}});
+
+    CHECK_FALSE(transfer_cash(1, 3, 100, from, to)); // unknown destination
+    CHECK_FALSE(transfer_cash(9, 2, 100, from, to)); // unknown source
+    CHECK_FALSE(transfer_cash(1, 1, 100, from, to)); // self transfer
+
+    CHECK(from.states.at(1).cash.value() == 1000);
+    CHECK(to.states.at(2).cash.value() == 0);
+}
+
+TEST_CASE("transfer_cash only moves cash above the locked amount") {
+    auto from = make_checker({{1, locked(100, 0, /*cash_locked=*/80)}});
+    auto to   = make_checker({{2, account(0, 0)}});
+
+    CHECK_FALSE(transfer_cash(1, 2, 30, from, to)); // free = 20
+    CHECK(from.states.at(1).cash.value() == 100);
+    CHECK(from.states.at(1).cash_locked == 80);
+    CHECK(to.states.at(2).cash.value() == 0);
+
+    CHECK(transfer_cash(1, 2, 20, from, to)); // exactly the free amount
+    CHECK(from.states.at(1).cash.value() == 80);
+    CHECK(from.states.at(1).cash_locked == 80); // locks untouched
+    CHECK(to.states.at(2).cash.value() == 20);
+}
+
+TEST_CASE("transfer_cash rejects receiver overflow and leaves sender intact") {
+    auto from = make_checker({{1, account(100, 0)}});
+    auto to   = make_checker({{2, account(UINT64_MAX - 1, 0)}});
+
+    CHECK_FALSE(transfer_cash(1, 2, 2, from, to));
+    CHECK(from.states.at(1).cash.value() == 100);
+    CHECK(to.states.at(2).cash.value() == UINT64_MAX - 1);
+
+    CHECK(transfer_cash(1, 2, 1, from, to)); // exactly fills the receiver
+    CHECK(from.states.at(1).cash.value() == 99);
+    CHECK(to.states.at(2).cash.value() == UINT64_MAX);
+}
+
+TEST_CASE("transfer_cash honours infinite (nullopt) cash") {
+    AccountState inf_source = account(0, 0);
+    inf_source.cash = std::nullopt;
+    auto from = make_checker({{1, inf_source}});
+    auto to   = make_checker({{2, account(50, 0)}});
+
+    CHECK(transfer_cash(1, 2, 100, from, to));
+    CHECK_FALSE(from.states.at(1).cash.has_value()); // stays infinite
+    CHECK(to.states.at(2).cash.value() == 150);
+
+    auto from2 = make_checker({{1, account(500, 0)}});
+    AccountState inf_dest = account(0, 0);
+    inf_dest.cash = std::nullopt;
+    auto to2 = make_checker({{2, inf_dest}});
+
+    CHECK(transfer_cash(1, 2, 100, from2, to2));
+    CHECK(from2.states.at(1).cash.value() == 400);
+    CHECK_FALSE(to2.states.at(2).cash.has_value()); // stays infinite
+}
+
+TEST_CASE("transfer_cash works between two accounts of the same checker") {
+    auto c = make_checker({{1, account(1000, 0)}, {2, account(0, 0)}});
+
+    CHECK(transfer_cash(1, 2, 250, c, c));
+    CHECK(c.states.at(1).cash.value() == 750);
+    CHECK(c.states.at(2).cash.value() == 250);
+    CHECK_FALSE(transfer_cash(1, 1, 10, c, c)); // self id still rejected
+}
+
+TEST_CASE("transfer_position moves available base between two checkers") {
+    auto from = make_checker({{1, account(0, 100)}});
+    auto to   = make_checker({{2, account(0, 0)}});
+
+    CHECK(transfer_position(1, 2, 40, from, to));
+    CHECK(from.states.at(1).base.value() == 60);
+    CHECK(to.states.at(2).base.value() == 40);
+    CHECK(from.states.at(1).base_locked == 0);
+    CHECK(to.states.at(2).base_locked == 0);
+}
+
+TEST_CASE("transfer_position rejects unknown or self accounts without changes") {
+    auto from = make_checker({{1, account(0, 100)}});
+    auto to   = make_checker({{2, account(0, 0)}});
+
+    CHECK_FALSE(transfer_position(1, 3, 10, from, to));
+    CHECK_FALSE(transfer_position(9, 2, 10, from, to));
+    CHECK_FALSE(transfer_position(1, 1, 10, from, to));
+
+    CHECK(from.states.at(1).base.value() == 100);
+    CHECK(to.states.at(2).base.value() == 0);
+}
+
+TEST_CASE("transfer_position only moves base above the locked amount") {
+    auto from = make_checker({{1, locked(0, 10, 0, /*base_locked=*/8)}});
+    auto to   = make_checker({{2, account(0, 0)}});
+
+    CHECK_FALSE(transfer_position(1, 2, 5, from, to)); // free = 2
+    CHECK(from.states.at(1).base.value() == 10);
+    CHECK(from.states.at(1).base_locked == 8);
+    CHECK(to.states.at(2).base.value() == 0);
+
+    CHECK(transfer_position(1, 2, 2, from, to)); // exactly the free amount
+    CHECK(from.states.at(1).base.value() == 8);
+    CHECK(from.states.at(1).base_locked == 8); // locks untouched
+    CHECK(to.states.at(2).base.value() == 2);
+}
+
+TEST_CASE("transfer_position enforces the receiver position limit") {
+    auto from = make_checker({{1, account(0, 100)}});
+    auto to   = make_checker({{2, account(0, 5, /*position_limit=*/10)}});
+
+    CHECK_FALSE(transfer_position(1, 2, 6, from, to)); // 5 + 6 > 10
+    CHECK(from.states.at(1).base.value() == 100);
+    CHECK(to.states.at(2).base.value() == 5);
+
+    CHECK(transfer_position(1, 2, 5, from, to)); // 5 + 5 == 10
+    CHECK(from.states.at(1).base.value() == 95);
+    CHECK(to.states.at(2).base.value() == 10);
+}
+
+TEST_CASE("transfer_position rejects when the receiver is already over its limit") {
+    auto from = make_checker({{1, account(0, 10)}});
+    auto to   = make_checker({{2, account(0, 12, /*position_limit=*/10)}});
+
+    CHECK_FALSE(transfer_position(1, 2, 1, from, to));
+    CHECK(from.states.at(1).base.value() == 10);
+    CHECK(to.states.at(2).base.value() == 12);
+}
+
+TEST_CASE("transfer_position rejects receiver overflow without a limit") {
+    auto from = make_checker({{1, account(0, 1000)}});
+    auto to   = make_checker({{2, account(0, UINT64_MAX - 1)}});
+
+    CHECK_FALSE(transfer_position(1, 2, 2, from, to));
+    CHECK(from.states.at(1).base.value() == 1000);
+    CHECK(to.states.at(2).base.value() == UINT64_MAX - 1);
+
+    CHECK(transfer_position(1, 2, 1, from, to)); // exactly fills the receiver
+    CHECK(from.states.at(1).base.value() == 999);
+    CHECK(to.states.at(2).base.value() == UINT64_MAX);
+}
+
+TEST_CASE("transfer_position honours infinite (nullopt) base") {
+    AccountState inf_source = account(0, 0);
+    inf_source.base = std::nullopt;
+    auto from = make_checker({{1, inf_source}});
+    auto to   = make_checker({{2, account(0, 3)}});
+
+    CHECK(transfer_position(1, 2, 5, from, to));
+    CHECK_FALSE(from.states.at(1).base.has_value()); // stays infinite
+    CHECK(to.states.at(2).base.value() == 8);
+
+    auto from2 = make_checker({{1, account(0, 50)}});
+    AccountState inf_dest = account(0, 0);
+    inf_dest.base = std::nullopt;
+    auto to2 = make_checker({{2, inf_dest}});
+
+    CHECK(transfer_position(1, 2, 5, from2, to2));
+    CHECK(from2.states.at(1).base.value() == 45);
+    CHECK_FALSE(to2.states.at(2).base.has_value()); // stays infinite
+}
+
+TEST_CASE("zero transfers succeed and change nothing") {
+    auto from = make_checker({{1, locked(100, 10, 100, 10)}});
+    auto to   = make_checker({{2, account(0, 0)}});
+
+    CHECK(transfer_cash(1, 2, 0, from, to));
+    CHECK(transfer_position(1, 2, 0, from, to));
+
+    CHECK(from.states.at(1).cash.value() == 100);
+    CHECK(from.states.at(1).cash_locked == 100);
+    CHECK(from.states.at(1).base.value() == 10);
+    CHECK(from.states.at(1).base_locked == 10);
+    CHECK(to.states.at(2).cash.value() == 0);
+    CHECK(to.states.at(2).base.value() == 0);
+}
+
+TEST_CASE("transfers do not disturb open-order reservations") {
+    auto c = make_checker({{1, account(1000, 0)}, {2, account(1000, 0)}});
+
+    REQUIRE(c.check(ctx(OPKind::Limit, 1, 1, 1, Side_t::Buy, P, 5)).kind == OPKind::Limit);
+    REQUIRE(c.states.at(1).cash_locked == 500);
+    REQUIRE(c.open.contains({1, 1}));
+
+    CHECK(transfer_cash(1, 2, 300, c, c));
+
+    CHECK(c.states.at(1).cash.value() == 700);
+    CHECK(c.states.at(1).cash_locked == 500); // reservation untouched
+    CHECK(c.open.contains({1, 1}));
+    CHECK(c.states.at(2).cash.value() == 1300);
+}
+
+TEST_CASE("reset clears resting orders and account state") {
+    Checker c;
+    auto init = book({{1, account(1000, 0)}});
+    c.reset(init, 0.0);
+
+    REQUIRE(c.check(ctx(OPKind::Limit, 1, 1, 1, Side_t::Buy, P, 5)).kind == OPKind::Limit);
+    REQUIRE(c.open.contains({1, 1}));
+
+    c.reset();
+    CHECK(c.open.empty());
+    CHECK(c.states.empty());
+}
+
+TEST_CASE("reset(init) also clears resting orders") {
+    Checker c;
+    auto init = book({{1, account(1000, 0)}});
+    c.reset(init, 0.0);
+
+    REQUIRE(c.check(ctx(OPKind::Limit, 1, 1, 1, Side_t::Buy, P, 5)).kind == OPKind::Limit);
+    REQUIRE(c.open.contains({1, 1}));
+
+    auto init2 = book({{1, account(500, 0)}});
+    c.reset(init2, 0.0);
+
+    CHECK(c.open.empty());
+    REQUIRE(c.states.contains(1));
+    CHECK(c.states.at(1).cash.value() == 500);
+    CHECK(c.states.at(1).cash_locked == 0);
+}
